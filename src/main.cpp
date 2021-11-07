@@ -13,13 +13,14 @@
 #include <LibRobus.h>
 #include <Sen0348_Digital/DFRobot_ID809.h>
 #include <stdlib.h>
+#include <Adafruit_TCS34725.h>
 
 #define FOLLOW_LINE_TIMER 1
 #define DETECT_BOWLING_PIN_TIMER 2
 #define LISTEN_SOUND_TIMER 3
 
 int step = 1;
-
+Adafruit_TCS34725 capteur = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_700MS, TCS34725_GAIN_1X);      // création de l'objet capteur 
 
 void followLine();
 void detectBowlingPin();
@@ -28,11 +29,13 @@ float getAngleToBowlingPin();
 void listenToSound();
 void killBowlingPin(float distance, float angle);
 void findExitLines();
-void detectColour();
+int  detectColour();
 void bringToRightColour();
+void servoMoteur(int angle);
 
 void setup() {
   BoardInit();
+  capteur.begin(); 
 
   SOFT_TIMER_SetCallback(FOLLOW_LINE_TIMER, followLine);
   SOFT_TIMER_SetCallback(DETECT_BOWLING_PIN_TIMER, detectBowlingPin);
@@ -78,6 +81,35 @@ void listenToSound(){
     killBowlingPin(distance, angle);
   }
 }
+
+int detectcolor(){
+    uint16_t clear, red, green, blue;
+    char couleur[1];
+
+    delay(250);                                                         // takes 50ms to read
+    capteur.getRawData(&red, &green, &blue, &clear);
+
+    if ( red>200 && green>200 && blue>100) {
+        couleur[0]='j';                                                 //test
+        Serial.print(" \ncouleur\t "); Serial.print(couleur);           //test
+        return 1;}
+    else   if ( red>200 && green>100 && blue<green) {
+        couleur[0]='r';                                                 //test
+        Serial.print(" \ncouleur\t "); Serial.print(couleur);           //test
+        return 2;}
+    else {
+        couleur[0]='b';                                                 //test
+        Serial.print(" \ncouleur\t "); Serial.print(couleur);           //test
+        return 3;}
+}
+
+void servoMoteur(int angle){
+  SERVO_Enable(0);
+  SERVO_Enable(1);
+  SERVO_SetAngle(0,angle);
+  SERVO_SetAngle(0,angle);
+}
+
 #pragma endregion
 
 #pragma region ColourDetection
