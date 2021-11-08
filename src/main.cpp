@@ -76,33 +76,33 @@ volatile bool encoderEqual = false;
 
 //ETAPE PARCOURS
 #define NBR_DISTANCE   2
-#define NBR_DISTANCEr  2
+#define NBR_DISTANCEr  1
 #define NBR_DISTANCErr 2
 #define NBR_DISTANCEj  3
 #define NBR_DISTANCEjr 4
 #define NBR_DISTANCEb  3
 #define NBR_DISTANCEbr 4
 #define NBR_ANGLE   2
-#define NBR_ANGLEr  2
+#define NBR_ANGLEr  1
 #define NBR_ANGLErr 2
 #define NBR_ANGLEj  3
 #define NBR_ANGLEjr 4
 #define NBR_ANGLEb  3
 #define NBR_ANGLEbr 4
 float tabDistance[NBR_DISTANCE]={0,45};
-float tabDistancer[NBR_DISTANCEr]={220,0};
-float tabDistancerr[NBR_DISTANCErr]={-15,280};
+float tabDistancer[NBR_DISTANCEr]={220};
+float tabDistancerr[NBR_DISTANCErr]={0,220};
 float tabDistancej[NBR_DISTANCEj]={0,40,220};
 float tabDistancejr[NBR_DISTANCEjr]={0,220,40,75};
 float tabDistanceb[NBR_DISTANCEb]={0,40,220};
 float tabDistancebr[NBR_DISTANCEbr]={0,220,40,75};
 int tabAngle[NBR_ANGLE]={180,0};
-int tabAngler[NBR_ANGLEr]={0,180};
-int tabAnglerr[NBR_ANGLErr]={0,180};
-int tabAnglej[NBR_ANGLEj]={90,-90,0};
-int tabAnglejr[NBR_ANGLEjr]={180,0,90,-90};
-int tabAngleb[NBR_ANGLEbr]={-90,90,0};
-int tabAnglebr[NBR_ANGLEbr]={180,0,-90,90};
+int tabAngler[NBR_ANGLEr]={0};
+int tabAnglerr[NBR_ANGLErr]={180,0};
+int tabAnglej[NBR_ANGLEj]={-90,90,0};
+int tabAnglejr[NBR_ANGLEjr]={180,-90,90,0};
+int tabAngleb[NBR_ANGLEbr]={90,-90,0};
+int tabAnglebr[NBR_ANGLEbr]={180,90,-90,0};
 int tmpValueTab;
 bool parcourSens; // 0 = go // 1 = back
 
@@ -115,6 +115,7 @@ float accelerationDecelerationPID(float pourcentageVitesse, uint8_t acceleration
 float maxSpeed, float speed);
 
 int step = 1;
+int angleMoteur;
 //capteur couleur
 Adafruit_TCS34725 capteur = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_700MS, TCS34725_GAIN_1X);      // création de l'objet capteur 
 void porterBalle();
@@ -134,7 +135,6 @@ void detectSound();
 
 void setup() {
   BoardInit(); 
-   capteur.begin();
   readEncoder0 = 0;
   readEncoder1 = 0;
   servoMoteur(180);
@@ -240,7 +240,7 @@ int detectcolor(){
     delay(250);                                                         // takes 50ms to read
     capteur.getRawData(&red, &green, &blue, &clear);
 
-    if ( red>200 && green>200 && blue>100) {
+    if ( red>250 && green>250 && blue>100) {
         couleur[0]='j';                                                 //test
         Serial.print(" \ncouleur\t "); Serial.print(couleur);           //test
         return 1;}
@@ -257,8 +257,8 @@ int detectcolor(){
 
 void porterBalle()
 {
-
-  int couleur = detectcolor();
+  int couleur =1;
+  delay(2000);
   for(int i = 0; NBR_DISTANCE > i; i++){
   executionStepParcours(tabDistance[i], tabAngle[i]);
   }
@@ -299,10 +299,22 @@ void porterBalle()
   }
 }
 void servoMoteur(int angle){
-  SERVO_Enable(0);
-  SERVO_Enable(1);
-  SERVO_SetAngle(0,angle);
-  SERVO_SetAngle(0,angle);
+    if (angle>angleMoteur)
+    {
+        for (int i=angleMoteur;i<angle;i+=1){
+        SERVO_SetAngle(0,i);
+        SERVO_SetAngle(1,i);
+        delay(5);
+  }
+}
+    else{
+      for (int i=angleMoteur;i>angle;i-=1){
+      SERVO_SetAngle(0,i);
+      SERVO_SetAngle(1,i);
+      delay(5);
+      }
+}
+  angleMoteur=angle;
 }
 
 bool executionStepParcours(uint16_t distance, int angle){
