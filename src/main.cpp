@@ -15,9 +15,26 @@
 #include <stdlib.h>
 #include <Adafruit_TCS34725.h>
 
+#define RIGHT_WHEEL 1
+#define LEFT_WHEEL 0
+#define WHEEL_BASE_SPEED 0.25
+#define WHEEL_ADD_SPEED 0.05
+
+
 #define FOLLOW_LINE_TIMER 1
 #define DETECT_BOWLING_PIN_TIMER 2
-#define LISTEN_SOUND_TIMER 3
+#define DETECT_SOUND_TIMER 3 
+
+// OBP-704 possible values for suiveur de ligne
+#define LINE_LEFT  0.25             // 1 0 0 0
+#define LINE_LEANING_LEFT 0.95      // 1 1 0 0
+#define LINE_SLIGHTLY_LEFT 0.78     // 0 1 0 0
+#define LINE_CENTER 2.16            // 0 1 1 0
+#define LINE_SLIGHTLY_RIGHT 1.45    // 0 0 1 0
+#define LINE_LEANING_RIGHT 4.19     // 0 0 1 1
+#define LINE_RIGHT 2.81             // 0 0 0 1
+#define LINE_LOST 0.07              // 0 0 0 0
+
 
 //WHEEL
 #define ENCODER_STEP 3200
@@ -110,7 +127,10 @@ void killBowlingPin(float distance, float angle);
 void findExitLines();
 int  detectColour();
 void bringToRightColour();
+void stopMotor();
 void servoMoteur(int angle);
+/* void init_Detection5kHz();*/
+void detectSound();
 
 void setup() {
   BoardInit(); 
@@ -119,19 +139,30 @@ void setup() {
   servoMoteur(180);
   SOFT_TIMER_SetCallback(FOLLOW_LINE_TIMER, followLine);
   SOFT_TIMER_SetCallback(DETECT_BOWLING_PIN_TIMER, detectBowlingPin);
-  SOFT_TIMER_SetCallback(LISTEN_SOUND_TIMER, listenToSound);
+  SOFT_TIMER_SetCallback(DETECT_SOUND_TIMER, detectSound);
 
+  
+  
+  //Ajout du temps de répétition
+  //SOFT_TIMER_SetDelay(int id, int ms)
   SOFT_TIMER_SetDelay(FOLLOW_LINE_TIMER, 50);
   SOFT_TIMER_SetDelay(DETECT_BOWLING_PIN_TIMER, 100);
-  SOFT_TIMER_SetDelay(LISTEN_SOUND_TIMER, 100);
+  SOFT_TIMER_SetDelay(DETECT_SOUND_TIMER, 50);
 
+
+
+  //Ajout du nombre de fois qu'il répétera la fonction (-1 = infini);
+  //SOFT_TIMER_SetRepetition(int id, int nbFois)
   SOFT_TIMER_SetRepetition(FOLLOW_LINE_TIMER, -1);
   SOFT_TIMER_SetRepetition(DETECT_BOWLING_PIN_TIMER, -1);
-  SOFT_TIMER_SetRepetition(LISTEN_SOUND_TIMER, -1);
+  SOFT_TIMER_SetRepetition(DETECT_SOUND_TIMER, -1);
 
+  //détermine si le timer pour la fonction et activé ou désactivé.
+  //SOFT_TIMER_Enable(int id);
+  //SOFT_TIMER_disable(int id);
   SOFT_TIMER_Enable(FOLLOW_LINE_TIMER);
-  SOFT_TIMER_Enable(DETECT_BOWLING_PIN_TIMER);
-  SOFT_TIMER_Enable(LISTEN_SOUND_TIMER);
+  /* SOFT_TIMER_Enable(DETECT_BOWLING_PIN_TIMER);
+  SOFT_TIMER_Enable(DETECT_SOUND_TIMER); */
 }
 
 
@@ -141,25 +172,63 @@ void loop() {
 
 #pragma region BowlingPinArc
 void followLine(){
-  //Suivre la ligne Étape 1 et probablement après avoir fait tombé la quille
-  Serial.println("Follow Line");
+  // Ajustement des roues pour le suiveur de ligne
+  // Vue qu'on se base sur les capteurs, nous n'utilisons pas de PID :)
+  //on va chercher le voltage
+  //on ajuste les roues dépendant du voltage
+  float voltageValue = (analogRead(A0))*(5/1023.0);
+  //Serial.println(voltageValue); TEST
+  
+  float motor_left_speed = 0;
+  float motor_right_speed = 0;
+  
+  if(voltageValue >= LINE_LEFT - 0.05 && voltageValue <= LINE_LEFT + 0.05 ){
+    //Tourne vers droite
+    Serial.println("LINE_LEFT");
+    /* motor_left_speed = WHEEL_BASE_SPEED + (WHEEL_ADD_SPEED*2);
+    motor_right_speed = WHEEL_BASE_SPEED - (WHEEL_ADD_SPEED*2); */
+  } else if (voltageValue >= LINE_LEANING_LEFT - 0.05 && voltageValue <= LINE_LEANING_LEFT + 0.05 ) {
+    //Tourne vers droite
+    Serial.println("LINE_LEANING_LEFT");
+    /* motor_left_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED;
+    motor_right_speed = WHEEL_BASE_SPEED - WHEEL_ADD_SPEED; */
+  } else if (voltageValue >= LINE_SLIGHTLY_LEFT - 0.05 && voltageValue <= LINE_SLIGHTLY_LEFT + 0.05 ) {
+    //Tourne vers droite
+    Serial.println("LINE_SLIGHTLY_LEFT");
+    /* motor_left_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED;
+    motor_right_speed = WHEEL_BASE_SPEED; */
+
+  } else if (voltageValue >= LINE_CENTER - 0.05 && voltageValue <= LINE_CENTER + 0.05 ) {
+    //OK good! (On fait rien)
+    Serial.println("LINE_CENTER");
+    /* motor_left_speed = WHEEL_BASE_SPEED;
+    motor_right_speed = WHEEL_BASE_SPEED; */
+  
+  } else if (voltageValue >= LINE_SLIGHTLY_RIGHT - 0.05 && voltageValue <= LINE_SLIGHTLY_RIGHT + 0.05 ) {
+    //Tourne vers gauche
+    Serial.println("LINE_SLIGHTLY_RIGHT");
+    /* motor_left_speed = WHEEL_BASE_SPEED;
+    motor_right_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED; */
+  } else if (voltageValue >= LINE_LEANING_RIGHT - 0.05 && voltageValue <= LINE_LEANING_RIGHT + 0.05 ) {
+    //Tourne vers gauche     
+    Serial.println("LINE_LEANING_RIGHT");
+    /* motor_left_speed = WHEEL_BASE_SPEED - WHEEL_ADD_SPEED;
+    motor_right_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED; */
+  } else if (voltageValue >= LINE_RIGHT - 0.05 && voltageValue <= LINE_RIGHT + 0.05 ){
+    //Tourne vers gauche
+    Serial.println("LINE_RIGHT");
+    /* motor_left_speed = WHEEL_BASE_SPEED - (WHEEL_ADD_SPEED*2);
+    motor_right_speed = WHEEL_BASE_SPEED + (WHEEL_ADD_SPEED*2); */
+  }
+ 
+  /* MOTOR_SetSpeed(RIGHT_WHEEL , motor_right_speed);
+  MOTOR_SetSpeed(LEFT_WHEEL , motor_left_speed); */
 }
 
 void detectBowlingPin(){
   //Mesurer avec l'infrarouge ou le sonar
   Serial.println("Detect Bowling Pin");
   //Prend en note à chaques fois qu'elle le détecte
-}
-
-void listenToSound(){
-  if(/*Détecte le son de 5khz*/ false){
-    SOFT_TIMER_Disable(FOLLOW_LINE_TIMER);
-    SOFT_TIMER_Disable(DETECT_BOWLING_PIN_TIMER);
-    SOFT_TIMER_Disable(LISTEN_SOUND_TIMER);
-    float distance = getDistanceToBowlingPin();
-    float angle = getAngleToBowlingPin();
-    killBowlingPin(distance, angle);
-  }
 }
 
 int detectcolor(){
@@ -413,6 +482,26 @@ float accelerationDecelerationPID(float pourcentageVitesse, uint8_t acceleration
     return speed;
   }
 }
+void detectSound(){
+  float voltageValue = analogRead(A1) *(5/1023.0);
+  if(false /*Valeur qu'on voudra */){
+     SOFT_TIMER_Disable(FOLLOW_LINE_TIMER);
+     stopMotor();
+  }
+}
+
+/* void init_Detection5kHz(){
+  PORTK |= (1<<7); //active PULL_DOWN A15
+  PCICR |= (1<<2); //enable PCINT 23
+  PCMSK2 |= (1<<7);
+  sei();
+}
+
+ISR(PCINT2_vect){
+  SOFT_TIMER_Disable(FOLLOW_LINE_TIMER);
+
+} */
+
 #pragma endregion
 
 #pragma region ColourDetection
