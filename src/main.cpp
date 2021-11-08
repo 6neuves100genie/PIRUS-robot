@@ -75,34 +75,34 @@ volatile uint8_t compt = 0;
 volatile bool encoderEqual = false;
 
 //ETAPE PARCOURS
-#define NBR_DISTANCE   1
-#define NBR_DISTANCEr  1
+#define NBR_DISTANCE   2
+#define NBR_DISTANCEr  2
 #define NBR_DISTANCErr 2
 #define NBR_DISTANCEj  3
 #define NBR_DISTANCEjr 4
 #define NBR_DISTANCEb  3
 #define NBR_DISTANCEbr 4
-#define NBR_ANGLE   1 
-#define NBR_ANGLEr  1
+#define NBR_ANGLE   2
+#define NBR_ANGLEr  2
 #define NBR_ANGLErr 2
 #define NBR_ANGLEj  3
-#define NBR_ANGLEjr 5
+#define NBR_ANGLEjr 4
 #define NBR_ANGLEb  3
-#define NBR_ANGLEbr 5
-float tabDistance[NBR_DISTANCE]={45};
-float tabDistancer[NBR_DISTANCEr]={220};
+#define NBR_ANGLEbr 4
+float tabDistance[NBR_DISTANCE]={0,45};
+float tabDistancer[NBR_DISTANCEr]={220,0};
 float tabDistancerr[NBR_DISTANCErr]={-15,280};
 float tabDistancej[NBR_DISTANCEj]={0,40,220};
-float tabDistancejr[NBR_DISTANCEjr]={-15,205,40,75};
+float tabDistancejr[NBR_DISTANCEjr]={0,220,40,75};
 float tabDistanceb[NBR_DISTANCEb]={0,40,220};
-float tabDistancebr[NBR_DISTANCEbr]={-15,205,40,75};
-int tabAngle[NBR_ANGLE]={0};
-int tabAngler[NBR_ANGLEr]={0};
+float tabDistancebr[NBR_DISTANCEbr]={0,220,40,75};
+int tabAngle[NBR_ANGLE]={180,0};
+int tabAngler[NBR_ANGLEr]={0,180};
 int tabAnglerr[NBR_ANGLErr]={0,180};
 int tabAnglej[NBR_ANGLEj]={90,-90,0};
-int tabAnglejr[NBR_ANGLEjr]={0,180,90,-90,0};
+int tabAnglejr[NBR_ANGLEjr]={180,0,90,-90};
 int tabAngleb[NBR_ANGLEbr]={-90,90,0};
-int tabAnglebr[NBR_ANGLEbr]={0,180,-90,90,0};
+int tabAnglebr[NBR_ANGLEbr]={180,0,-90,90};
 int tmpValueTab;
 bool parcourSens; // 0 = go // 1 = back
 
@@ -125,7 +125,7 @@ float getAngleToBowlingPin();
 void listenToSound();
 void killBowlingPin(float distance, float angle);
 void findExitLines();
-int  detectColour();
+int  detectColor();
 void bringToRightColour();
 void stopMotor();
 void servoMoteur(int angle);
@@ -134,6 +134,7 @@ void detectSound();
 
 void setup() {
   BoardInit(); 
+   capteur.begin();
   readEncoder0 = 0;
   readEncoder1 = 0;
   servoMoteur(180);
@@ -167,6 +168,7 @@ void setup() {
 
 
 void loop() {
+  porterBalle();
   SOFT_TIMER_Update();
 }
 
@@ -250,6 +252,7 @@ int detectcolor(){
         couleur[0]='b';                                                 //test
         Serial.print(" \ncouleur\t "); Serial.print(couleur);           //test
         return 3;}
+        return 0;
 }
 
 void porterBalle()
@@ -331,7 +334,7 @@ void movingFowardRobot(uint16_t distance){
   motorRight = 0;
   sumError = 0;
 
-  ENCODER_Reset(RIGHT_WHEEL);
+  ENCODER_Reset(RIGHT_WHEEL); 
   ENCODER_Reset(LEFT_WHEEL);
 
 
