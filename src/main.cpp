@@ -23,7 +23,6 @@
 
 #define FOLLOW_LINE_TIMER 1
 #define DETECT_BOWLING_PIN_TIMER 2
-#define LISTEN_SOUND_TIMER 3
 
 // OBP-704 possible values for suiveur de ligne
 #define LINE_LEFT  0.25             // 1 0 0 0
@@ -50,36 +49,35 @@ int  detectColour();
 void bringToRightColour();
 void stopMotor();
 void servoMoteur(int angle);
+void init_Detection5kHz();
+
 
 void setup() {
   BoardInit();
   capteur.begin(); 
-
+  init_Detection5kHz();
   //Création de Timers car notre robot ne peut pas faire du multi-thread
   //SOFT_TIMER_SetCallback(int id, func);
   SOFT_TIMER_SetCallback(FOLLOW_LINE_TIMER, followLine);
   SOFT_TIMER_SetCallback(DETECT_BOWLING_PIN_TIMER, detectBowlingPin);
-  SOFT_TIMER_SetCallback(LISTEN_SOUND_TIMER, listenToSound);
   
   
   //Ajout du temps de répétition
   //SOFT_TIMER_SetDelay(int id, int ms)
   SOFT_TIMER_SetDelay(FOLLOW_LINE_TIMER, 200);
   SOFT_TIMER_SetDelay(DETECT_BOWLING_PIN_TIMER, 100);
-  SOFT_TIMER_SetDelay(LISTEN_SOUND_TIMER, 100);
+
 
 
   //Ajout du nombre de fois qu'il répétera la fonction (-1 = infini);
   //SOFT_TIMER_SetRepetition(int id, int nbFois)
   SOFT_TIMER_SetRepetition(FOLLOW_LINE_TIMER, -1);
   SOFT_TIMER_SetRepetition(DETECT_BOWLING_PIN_TIMER, -1);
-  SOFT_TIMER_SetRepetition(LISTEN_SOUND_TIMER, -1);
 
   //détermine si le timer pour la fonction et activé ou désactivé.
   //SOFT_TIMER_Enable(int id);
   //SOFT_TIMER_disable(int id);
   SOFT_TIMER_Enable(FOLLOW_LINE_TIMER);
-  SOFT_TIMER_Enable(LISTEN_SOUND_TIMER);
 }
 
 
@@ -102,18 +100,18 @@ void followLine(){
   if(voltageValue >= LINE_LEFT - 0.05 && voltageValue <= LINE_LEFT + 0.05 ){
     //Tourne vers droite
     //Serial.println("LINE_LEFT"); TEST
-    motor_left_speed = WHEEL_BASE_SPEED - (WHEEL_ADD_SPEED*2);
-    motor_right_speed = WHEEL_BASE_SPEED + (WHEEL_ADD_SPEED*2);
+    motor_left_speed = WHEEL_BASE_SPEED + (WHEEL_ADD_SPEED*2);
+    motor_right_speed = WHEEL_BASE_SPEED - (WHEEL_ADD_SPEED*2);
   } else if (voltageValue >= LINE_LEANING_LEFT - 0.05 && voltageValue <= LINE_LEANING_LEFT + 0.05 ) {
     //Tourne vers droite
     //Serial.println("LINE_LEANING_LEFT"); TEST
-    motor_left_speed = WHEEL_BASE_SPEED - WHEEL_ADD_SPEED;
-    motor_right_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED;
+    motor_left_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED;
+    motor_right_speed = WHEEL_BASE_SPEED - WHEEL_ADD_SPEED;
   } else if (voltageValue >= LINE_SLIGHTLY_LEFT - 0.05 && voltageValue <= LINE_SLIGHTLY_LEFT + 0.05 ) {
     //Tourne vers droite
     //Serial.println("LINE_SLIGHTLY_LEFT"); TEST
-    motor_left_speed = WHEEL_BASE_SPEED;
-    motor_right_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED;
+    motor_left_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED;
+    motor_right_speed = WHEEL_BASE_SPEED;
 
   } else if (voltageValue >= LINE_CENTER - 0.05 && voltageValue <= LINE_CENTER + 0.05 ) {
     //OK good! (On fait rien)
@@ -124,18 +122,18 @@ void followLine(){
   } else if (voltageValue >= LINE_SLIGHTLY_RIGHT - 0.05 && voltageValue <= LINE_SLIGHTLY_RIGHT + 0.05 ) {
     //Tourne vers gauche
     //Serial.println("LINE_SLIGHTLY_RIGHT"); TEST
-    motor_left_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED;
-    motor_right_speed = WHEEL_BASE_SPEED;
+    motor_left_speed = WHEEL_BASE_SPEED;
+    motor_right_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED;
   } else if (voltageValue >= LINE_LEANING_RIGHT - 0.05 && voltageValue <= LINE_LEANING_RIGHT + 0.05 ) {
     //Tourne vers gauche     
     //Serial.println("LINE_LEANING_RIGHT"); TEST
-    motor_left_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED;
-    motor_right_speed = WHEEL_BASE_SPEED - WHEEL_ADD_SPEED;
+    motor_left_speed = WHEEL_BASE_SPEED - WHEEL_ADD_SPEED;
+    motor_right_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED;
   } else if (voltageValue >= LINE_RIGHT - 0.05 && voltageValue <= LINE_RIGHT + 0.05 ){
     //Tourne vers gauche
     //Serial.println("LINE_RIGHT"); TEST
-    motor_left_speed = WHEEL_BASE_SPEED + (WHEEL_ADD_SPEED*2);
-    motor_right_speed = WHEEL_BASE_SPEED - (WHEEL_ADD_SPEED*2);
+    motor_left_speed = WHEEL_BASE_SPEED - (WHEEL_ADD_SPEED*2);
+    motor_right_speed = WHEEL_BASE_SPEED + (WHEEL_ADD_SPEED*2);
   }
  
   MOTOR_SetSpeed(RIGHT_WHEEL , motor_right_speed);
@@ -146,16 +144,6 @@ void detectBowlingPin(){
   //Mesurer avec l'infrarouge ou le sonar
   Serial.println("Detect Bowling Pin");
   //Prend en note à chaques fois qu'elle le détecte
-}
-
-void listenToSound(){
-  if(/*Détecte le son de 5khz*/ false){
-    SOFT_TIMER_Enable(DETECT_BOWLING_PIN_TIMER);
-    SOFT_TIMER_Disable(LISTEN_SOUND_TIMER);
-    float distance = getDistanceToBowlingPin();
-    float angle = getAngleToBowlingPin();
-    killBowlingPin(distance, angle);
-  }
 }
 
 int detectcolor(){
@@ -189,6 +177,18 @@ void servoMoteur(int angle){
 void stopMotor(){
   MOTOR_SetSpeed(RIGHT_WHEEL , 0);
   MOTOR_SetSpeed(LEFT_WHEEL , 0);
+}
+
+void init_Detection5kHz(){
+  PORTK |= (1<<7); //active PULL_DOWN A15
+  PCICR |= (1<<2); //enable PCINT 23
+  PCMSK2 |= (1<<7);
+  sei();
+}
+
+ISR(PCINT2_vect){
+  SOFT_TIMER_Disable(FOLLOW_LINE_TIMER);
+  
 }
 
 #pragma endregion
