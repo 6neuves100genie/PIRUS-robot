@@ -23,6 +23,7 @@
 
 #define FOLLOW_LINE_TIMER 1
 #define DETECT_BOWLING_PIN_TIMER 2
+#define DETECT_SOUND_TIMER 3 
 
 // OBP-704 possible values for suiveur de ligne
 #define LINE_LEFT  0.25             // 1 0 0 0
@@ -49,23 +50,26 @@ int  detectColour();
 void bringToRightColour();
 void stopMotor();
 void servoMoteur(int angle);
-void init_Detection5kHz();
-
+/* void init_Detection5kHz();*/
+void detectSound();
 
 void setup() {
   BoardInit();
   capteur.begin(); 
-  init_Detection5kHz();
+ /*  init_Detection5kHz(); */
   //Création de Timers car notre robot ne peut pas faire du multi-thread
   //SOFT_TIMER_SetCallback(int id, func);
   SOFT_TIMER_SetCallback(FOLLOW_LINE_TIMER, followLine);
   SOFT_TIMER_SetCallback(DETECT_BOWLING_PIN_TIMER, detectBowlingPin);
+  SOFT_TIMER_SetCallback(DETECT_SOUND_TIMER, detectSound);
+
   
   
   //Ajout du temps de répétition
   //SOFT_TIMER_SetDelay(int id, int ms)
-  SOFT_TIMER_SetDelay(FOLLOW_LINE_TIMER, 200);
+  SOFT_TIMER_SetDelay(FOLLOW_LINE_TIMER, 50);
   SOFT_TIMER_SetDelay(DETECT_BOWLING_PIN_TIMER, 100);
+  SOFT_TIMER_SetDelay(DETECT_SOUND_TIMER, 50);
 
 
 
@@ -73,11 +77,14 @@ void setup() {
   //SOFT_TIMER_SetRepetition(int id, int nbFois)
   SOFT_TIMER_SetRepetition(FOLLOW_LINE_TIMER, -1);
   SOFT_TIMER_SetRepetition(DETECT_BOWLING_PIN_TIMER, -1);
+  SOFT_TIMER_SetRepetition(DETECT_SOUND_TIMER, -1);
 
   //détermine si le timer pour la fonction et activé ou désactivé.
   //SOFT_TIMER_Enable(int id);
   //SOFT_TIMER_disable(int id);
   SOFT_TIMER_Enable(FOLLOW_LINE_TIMER);
+  SOFT_TIMER_Enable(DETECT_BOWLING_PIN_TIMER);
+  SOFT_TIMER_Enable(DETECT_SOUND_TIMER);
 }
 
 
@@ -179,7 +186,15 @@ void stopMotor(){
   MOTOR_SetSpeed(LEFT_WHEEL , 0);
 }
 
-void init_Detection5kHz(){
+void detectSound(){
+  float voltageValue = analogRead(A1) *(5/1023.0);
+  if(false /*Valeur qu'on voudra */){
+     SOFT_TIMER_Disable(FOLLOW_LINE_TIMER);
+     stopMotor();
+  }
+}
+
+/* void init_Detection5kHz(){
   PORTK |= (1<<7); //active PULL_DOWN A15
   PCICR |= (1<<2); //enable PCINT 23
   PCMSK2 |= (1<<7);
@@ -188,8 +203,8 @@ void init_Detection5kHz(){
 
 ISR(PCINT2_vect){
   SOFT_TIMER_Disable(FOLLOW_LINE_TIMER);
-  
-}
+
+} */
 
 #pragma endregion
 
