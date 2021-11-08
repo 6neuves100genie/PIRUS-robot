@@ -83,8 +83,8 @@ void setup() {
   //SOFT_TIMER_Enable(int id);
   //SOFT_TIMER_disable(int id);
   SOFT_TIMER_Enable(FOLLOW_LINE_TIMER);
-  SOFT_TIMER_Enable(DETECT_BOWLING_PIN_TIMER);
-  SOFT_TIMER_Enable(DETECT_SOUND_TIMER);
+  /* SOFT_TIMER_Enable(DETECT_BOWLING_PIN_TIMER);
+  SOFT_TIMER_Enable(DETECT_SOUND_TIMER); */
 }
 
 
@@ -106,45 +106,45 @@ void followLine(){
   
   if(voltageValue >= LINE_LEFT - 0.05 && voltageValue <= LINE_LEFT + 0.05 ){
     //Tourne vers droite
-    //Serial.println("LINE_LEFT"); TEST
-    motor_left_speed = WHEEL_BASE_SPEED + (WHEEL_ADD_SPEED*2);
-    motor_right_speed = WHEEL_BASE_SPEED - (WHEEL_ADD_SPEED*2);
+    Serial.println("LINE_LEFT");
+    /* motor_left_speed = WHEEL_BASE_SPEED + (WHEEL_ADD_SPEED*2);
+    motor_right_speed = WHEEL_BASE_SPEED - (WHEEL_ADD_SPEED*2); */
   } else if (voltageValue >= LINE_LEANING_LEFT - 0.05 && voltageValue <= LINE_LEANING_LEFT + 0.05 ) {
     //Tourne vers droite
-    //Serial.println("LINE_LEANING_LEFT"); TEST
-    motor_left_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED;
-    motor_right_speed = WHEEL_BASE_SPEED - WHEEL_ADD_SPEED;
+    Serial.println("LINE_LEANING_LEFT");
+    /* motor_left_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED;
+    motor_right_speed = WHEEL_BASE_SPEED - WHEEL_ADD_SPEED; */
   } else if (voltageValue >= LINE_SLIGHTLY_LEFT - 0.05 && voltageValue <= LINE_SLIGHTLY_LEFT + 0.05 ) {
     //Tourne vers droite
-    //Serial.println("LINE_SLIGHTLY_LEFT"); TEST
-    motor_left_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED;
-    motor_right_speed = WHEEL_BASE_SPEED;
+    Serial.println("LINE_SLIGHTLY_LEFT");
+    /* motor_left_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED;
+    motor_right_speed = WHEEL_BASE_SPEED; */
 
   } else if (voltageValue >= LINE_CENTER - 0.05 && voltageValue <= LINE_CENTER + 0.05 ) {
     //OK good! (On fait rien)
-    //Serial.println("LINE_CENTER"); TEST
-    motor_left_speed = WHEEL_BASE_SPEED;
-    motor_right_speed = WHEEL_BASE_SPEED;
+    Serial.println("LINE_CENTER");
+    /* motor_left_speed = WHEEL_BASE_SPEED;
+    motor_right_speed = WHEEL_BASE_SPEED; */
   
   } else if (voltageValue >= LINE_SLIGHTLY_RIGHT - 0.05 && voltageValue <= LINE_SLIGHTLY_RIGHT + 0.05 ) {
     //Tourne vers gauche
-    //Serial.println("LINE_SLIGHTLY_RIGHT"); TEST
-    motor_left_speed = WHEEL_BASE_SPEED;
-    motor_right_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED;
+    Serial.println("LINE_SLIGHTLY_RIGHT");
+    /* motor_left_speed = WHEEL_BASE_SPEED;
+    motor_right_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED; */
   } else if (voltageValue >= LINE_LEANING_RIGHT - 0.05 && voltageValue <= LINE_LEANING_RIGHT + 0.05 ) {
     //Tourne vers gauche     
-    //Serial.println("LINE_LEANING_RIGHT"); TEST
-    motor_left_speed = WHEEL_BASE_SPEED - WHEEL_ADD_SPEED;
-    motor_right_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED;
+    Serial.println("LINE_LEANING_RIGHT");
+    /* motor_left_speed = WHEEL_BASE_SPEED - WHEEL_ADD_SPEED;
+    motor_right_speed = WHEEL_BASE_SPEED + WHEEL_ADD_SPEED; */
   } else if (voltageValue >= LINE_RIGHT - 0.05 && voltageValue <= LINE_RIGHT + 0.05 ){
     //Tourne vers gauche
-    //Serial.println("LINE_RIGHT"); TEST
-    motor_left_speed = WHEEL_BASE_SPEED - (WHEEL_ADD_SPEED*2);
-    motor_right_speed = WHEEL_BASE_SPEED + (WHEEL_ADD_SPEED*2);
+    Serial.println("LINE_RIGHT");
+    /* motor_left_speed = WHEEL_BASE_SPEED - (WHEEL_ADD_SPEED*2);
+    motor_right_speed = WHEEL_BASE_SPEED + (WHEEL_ADD_SPEED*2); */
   }
  
-  MOTOR_SetSpeed(RIGHT_WHEEL , motor_right_speed);
-  MOTOR_SetSpeed(LEFT_WHEEL , motor_left_speed);
+  /* MOTOR_SetSpeed(RIGHT_WHEEL , motor_right_speed);
+  MOTOR_SetSpeed(LEFT_WHEEL , motor_left_speed); */
 }
 
 void detectBowlingPin(){
