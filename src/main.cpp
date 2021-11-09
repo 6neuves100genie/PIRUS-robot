@@ -163,7 +163,6 @@ void setup() {
 
 
 void loop() {
-  porterBalle();
   SOFT_TIMER_Update();
 }
 
