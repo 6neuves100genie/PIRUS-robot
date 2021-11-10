@@ -26,18 +26,18 @@
 #define DETECT_SOUND_TIMER 3 
 
 // OBP-704 possible values for suiveur de ligne
-#define LINE_LEFT  0.74             // 1 0 0
-#define LINE_CENTER 1.36            // 0 1 0
-#define LINE_RIGHT 2.64             // 0 0 1
+#define LINE_LEFT  0.79            // 1 0 0
+#define LINE_CENTER 1.45            // 0 1 0
+#define LINE_RIGHT 2.81             // 0 0 1
 
 // ANALOGS
 #define ANALOG_LINE_FOLLOWER A0
 #define ANALOG_BUZZER A1
 // DIGITALS
-#define DIGITAL_RED_LED 24
-#define DIGITAL_GREEN_LED 22
-#define DIGITAL_BLUE_LED 26
-#define DIGITAL_YELLOW_LED 28
+#define DIGITAL_RED_LED 46
+#define DIGITAL_GREEN_LED 44
+#define DIGITAL_BLUE_LED 48
+#define DIGITAL_YELLOW_LED 42
  
 
 //WHEEL
@@ -112,7 +112,7 @@ bool parcourSens; // 0 = go // 1 = back
 
 bool executionStepParcours(uint16_t distance, int angle);
 void stopMotor();
-void movingFowardRobot(uint16_t distance, bool sens);
+void movingFowardRobot(uint16_t distance);
 void turnedRobot(int angle);
 void reverseTab(int *tab, uint16_t sizeTab, bool sens);
 float accelerationDecelerationPID(float pourcentageVitesse, uint8_t acceleration, uint8_t deceleration, 
@@ -128,8 +128,7 @@ void detectBowlingPin();
 float getDistanceToBowlingPin();
 float getAngleToBowlingPin();
 void listenToSound();
-void killBowlingPin(float distance, float angle);
-void findExitLines();
+void findLineAgain();
 int  detectColor();
 void bringToRightColour();
 void stopMotor();
@@ -154,7 +153,7 @@ void setup() {
   //Ajout du temps de répétition
   //SOFT_TIMER_SetDelay(int id, int ms)
   SOFT_TIMER_SetDelay(FOLLOW_LINE_TIMER, 5);
-  SOFT_TIMER_SetDelay(DETECT_BOWLING_PIN_TIMER, 120);
+  SOFT_TIMER_SetDelay(DETECT_BOWLING_PIN_TIMER, 150);
   SOFT_TIMER_SetDelay(DETECT_SOUND_TIMER, 50);
 
 
@@ -168,10 +167,19 @@ void setup() {
   //détermine si le timer pour la fonction et activé ou désactivé.
   //SOFT_TIMER_Enable(int id);
   //SOFT_TIMER_disable(int id);
-  /* SOFT_TIMER_Enable(FOLLOW_LINE_TIMER);
-  SOFT_TIMER_Enable(DETECT_BOWLING_PIN_TIMER); */
-  /* SOFT_TIMER_Enable(DETECT_SOUND_TIMER); */
-}
+  SOFT_TIMER_Enable(FOLLOW_LINE_TIMER);
+  /* SOFT_TIMER_Enable(DETECT_BOWLING_PIN_TIMER); */
+  SOFT_TIMER_Enable(DETECT_SOUND_TIMER);
+/*   lightLED(1,0,0,0);
+  delay(500);
+  lightLED(1,1,0,0);
+  delay(500);
+  lightLED(1,1,1,0);
+  delay(500);
+  lightLED(1,1,1,1);
+  delay(500);
+  lightLED(0,0,0,0); */
+  }
 
 
 void loop() {
@@ -184,17 +192,16 @@ void followLine(){
   //on va chercher le voltage
   //on ajuste les roues dépendant du voltage
   float voltageValue = (analogRead(ANALOG_LINE_FOLLOWER))*(5/1023.0);
-  //Serial.println(voltageValue); TEST
+  Serial.println(voltageValue);
   float motor_left = 0;
   float motor_right = 0;
-  float motor_base_value = 0.6;
-  Serial.println(voltageValue);
+  float motor_base_value = 0.4;
   if(voltageValue >= LINE_LEFT -0.05 && voltageValue <= LINE_LEFT + 0.05){
     motor_left = motor_base_value;
-    motor_right = -0.1;
-  }else if (voltageValue >= LINE_RIGHT -0.05 && voltageValue <= LINE_RIGHT + 0.05){
+    motor_right = -motor_base_value;
+  }else if (voltageValue >= LINE_CENTER -0.05 && voltageValue <= LINE_CENTER + 0.05){
     motor_right = motor_base_value;
-    motor_left = -0.1;
+    motor_left = -motor_base_value;
   }else{
     motor_left = motor_base_value/2;
     motor_right = motor_base_value/2;
@@ -210,21 +217,61 @@ void detectBowlingPin(){
   float distance = SONAR_GetRange(1);
   Serial.println(distance);
   if(distance < 50.00 && distance > 0){
-    AX_BuzzerON(392, 100);
+    AX_BuzzerON(250, 100);
     lightLED(0,1,0,0);
-    SOFT_TIMER_Disable(FOLLOW_LINE_TIMER);
+    /* SOFT_TIMER_Disable(FOLLOW_LINE_TIMER);
     SOFT_TIMER_Disable(DETECT_BOWLING_PIN_TIMER);
-    turnedRobot(90);
-    movingFowardRobot(50, false);
+    stopMotor();
+    delay(3000);
+    turnedRobot(-90);
+    findLineAgain(); */
+    //tourner vers la droite
+    //CONTINUER D'AVANCER JUSQU'À
+    //V
     //retrouve la linge
     //recommence FOLLOW_LINE_TIMER
     //TROUVER INTERSECTION
     //DONNE LE CODE A ALEX  
   }
-  
-
   //Prend en note à chaques fois qu'elle le détecte
 }
+
+void findLineAgain(){
+  delay(1000);
+  readEncoder0 = 0;
+  readEncoder1 = 0;
+  motorLeft = 400;
+  motorRight = 0;
+  sumError = 0;
+
+  ENCODER_Reset(RIGHT_WHEEL); 
+  ENCODER_Reset(LEFT_WHEEL);
+  float voltageValue = analogRead(ANALOG_LINE_FOLLOWER)*(5/1023.0);
+  Serial.println(voltageValue);
+  while(voltageValue < 0.5)
+  {
+    voltageValue = analogRead(ANALOG_LINE_FOLLOWER)*(5/1023.0);
+    Serial.println(voltageValue);
+    readEncoder0 = ENCODER_Read(LEFT_WHEEL);  
+    readEncoder1 = ENCODER_Read(RIGHT_WHEEL);
+
+    //PID FOR ENCODER
+    float error = abs(readEncoder0 - readEncoder1);
+    float p = error * KP_FOWARD;
+
+    sumError += error;
+    float i = sumError * KI_FOWARD;
+
+    float adjSpeed = p + i;
+    motorRight = motorLeft + adjSpeed;
+
+    
+    MOTOR_SetSpeed(LEFT_WHEEL, -motorLeft);
+    MOTOR_SetSpeed(RIGHT_WHEEL, -motorRight);
+  } 
+  stopMotor();
+}
+
 
 int detectcolor(){
     uint16_t clear, red, green, blue;
@@ -312,7 +359,7 @@ void servoMoteur(int angle){
 
 bool executionStepParcours(uint16_t distance, int angle){
 
-  movingFowardRobot(distance, true);
+  movingFowardRobot(distance);
   delay(75);
 
   turnedRobot(angle);
@@ -330,7 +377,7 @@ void stopMotor(){
 }
 
 
-void movingFowardRobot(uint16_t distance, bool sens = 1){
+void movingFowardRobot(uint16_t distance){
   // uint16_t distance (CENTIMÈTRE);
   // bool sens (0 = à l'envers. 1 = à l'endroit);
   distanceEncodeur = (distance / RESOLUTION_ENCODER);
@@ -366,13 +413,9 @@ void movingFowardRobot(uint16_t distance, bool sens = 1){
     float adjSpeed = p + i;
     motorRight = motorLeft + adjSpeed;
 
-    if(sens){
-      MOTOR_SetSpeed(LEFT_WHEEL, -motorLeft);
-      MOTOR_SetSpeed(RIGHT_WHEEL, -motorRight);
-    }else{
-      MOTOR_SetSpeed(LEFT_WHEEL, motorLeft);
-      MOTOR_SetSpeed(RIGHT_WHEEL, motorRight);
-    }
+    
+    MOTOR_SetSpeed(LEFT_WHEEL, motorLeft);
+    MOTOR_SetSpeed(RIGHT_WHEEL, motorRight);
 
   }
 
@@ -499,7 +542,10 @@ float accelerationDecelerationPID(float pourcentageVitesse, uint8_t acceleration
 void detectSound(){
   float voltageValue = analogRead(ANALOG_BUZZER) *(5/1023.0);
   Serial.println(voltageValue);
-  if(false /*Valeur qu'on voudra */){
+  float target = 0.13;
+  if(voltageValue >= target /*Valeur qu'on voudra */){
+    lightLED(0,0,0,1);
+      SOFT_TIMER_Disable(DETECT_SOUND_TIMER);
      SOFT_TIMER_Enable(DETECT_BOWLING_PIN_TIMER);
 
   }
