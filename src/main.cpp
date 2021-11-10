@@ -46,8 +46,8 @@
 #define LEFT_WHEEL 0
 
 //FOWARD
-#define SPEED_MAX_HIGH_DISTANCE 0.9
-#define SPEED_MAX_LOW_DISTANCE 0.6
+#define SPEED_MAX_HIGH_DISTANCE 0.6
+#define SPEED_MAX_LOW_DISTANCE 0.4
 #define SPEED_MIN 0.2
 #define ACCELERATION_HIGH_DISTANCE 20 //accelere jusqu'a 10% de la distance
 #define DECCELERATION_HIGH_DISTANCE 75 //deccelere a partir de 90% de la distance
@@ -137,7 +137,7 @@ void setup() {
   BoardInit(); 
   readEncoder0 = 0;
   readEncoder1 = 0;
-  servoMoteur(180);
+  servoMoteur(150);
   SOFT_TIMER_SetCallback(FOLLOW_LINE_TIMER, followLine);
   SOFT_TIMER_SetCallback(DETECT_BOWLING_PIN_TIMER, detectBowlingPin);
   SOFT_TIMER_SetCallback(DETECT_SOUND_TIMER, detectSound);
@@ -263,15 +263,15 @@ void porterBalle()
   executionStepParcours(tabDistance[i], tabAngle[i]);
   }
   delay(500);
-  servoMoteur(0);
+  servoMoteur(90);
   delay(500);
   if (couleur==1){
   for(int i = 0; NBR_DISTANCEj > i; i++){
     executionStepParcours(tabDistancej[i], tabAnglej[i]);
   }
-  delay(500);
-  servoMoteur(180);
-  delay(500);
+  delay(2500);
+  servoMoteur(150);
+  delay(1500);
   for(int i = 0; NBR_DISTANCEjr > i; i++){
     executionStepParcours(tabDistancejr[i], tabAnglejr[i]);
   }
@@ -280,9 +280,9 @@ void porterBalle()
   for(int i = 0; NBR_DISTANCEr > i; i++){
     executionStepParcours(tabDistancer[i], tabAngler[i]);
   }
-  delay(500);
-  servoMoteur(180);
-  delay(500);
+  delay(2500);
+  servoMoteur(150);
+  delay(1500);
   for(int i = 0; NBR_DISTANCErr > i; i++){
     executionStepParcours(tabDistancerr[i], tabAnglerr[i]);
   }
@@ -290,9 +290,9 @@ void porterBalle()
   for(int i = 0; NBR_DISTANCEb > i; i++){
     executionStepParcours(tabDistanceb[i], tabAngleb[i]);
   }
-  delay(500);
-  servoMoteur(180);
-  delay(500);
+  delay(2500);
+  servoMoteur(150);
+  delay(1500);
   for(int i = 0; NBR_DISTANCEbr > i; i++){
     executionStepParcours(tabDistancebr[i], tabAnglebr[i]);
   }
@@ -304,14 +304,14 @@ void servoMoteur(int angle){
         for (int i=angleMoteur;i<angle;i+=1){
         SERVO_SetAngle(0,i);
         SERVO_SetAngle(1,i);
-        delay(5);
+        delay(15);
   }
 }
     else{
       for (int i=angleMoteur;i>angle;i-=1){
       SERVO_SetAngle(0,i);
       SERVO_SetAngle(1,i);
-      delay(5);
+      delay(15);
       }
 }
   angleMoteur=angle;
