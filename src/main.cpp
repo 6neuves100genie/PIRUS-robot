@@ -25,12 +25,14 @@
 #define DETECT_SOUND_TIMER 3
 
 // OBP-704 possible values for suiveur de ligne
-#define LINE_LEFT 0.99    // 1 0 0
+#define LINE_LEFT 1.02    // 1 0 0
 #define LINE_RIGHT 1.90   // 0 0 1
-#define LINE_COLOUR 0.55  // 0 1 0
-#define LINE_COLOUR2 2.41 // 1 1 0
-#define LINE_COLOUR3 1.49 // 0 1 1
+#define LINE_COLOUR 0.57  // 0 1 0
+#define LINE_COLOUR2 2.42 // 0 1 1
+#define LINE_COLOUR3 1.50 // 1 1 0
 #define LINE_COLOUR4 3.34 // 1 1 1
+
+#define LINE_UNDECIDED 2.88
 
 // ANALOGS
 #define ANALOG_LINE_FOLLOWER A0
@@ -146,14 +148,16 @@ void setup()
   initLEDsPin();
   readEncoder0 = 0;
   readEncoder1 = 0;
-  servoMoteur(150);
+  /* SERVO_Enable(0);
+  SERVO_Enable(1);
+  servoMoteur(150); */
   SOFT_TIMER_SetCallback(FOLLOW_LINE_TIMER, followLine);
   SOFT_TIMER_SetCallback(DETECT_BOWLING_PIN_TIMER, detectBowlingPin);
   SOFT_TIMER_SetCallback(DETECT_SOUND_TIMER, detectSound);
 
   //Ajout du temps de répétition
   //SOFT_TIMER_SetDelay(int id, int ms)
-  SOFT_TIMER_SetDelay(FOLLOW_LINE_TIMER, 5);
+  SOFT_TIMER_SetDelay(FOLLOW_LINE_TIMER, 2);
   SOFT_TIMER_SetDelay(DETECT_BOWLING_PIN_TIMER, 150);
   SOFT_TIMER_SetDelay(DETECT_SOUND_TIMER, 50);
 
@@ -169,13 +173,13 @@ void setup()
   /* SOFT_TIMER_Enable(FOLLOW_LINE_TIMER); */
   /* SOFT_TIMER_Enable(DETECT_BOWLING_PIN_TIMER); */
   SOFT_TIMER_Enable(DETECT_SOUND_TIMER);
-  lightLED(0, 1, 0, 0);
+  
+  lightLED(1, 0, 0, 0);
   delay(500);
-  lightLED(0, 1, 1, 0);
+  lightLED(1, 0, 1, 0);
   delay(500);
-  lightLED(0, 1, 1, 1);
-  delay(500);
-  lightLED(0, 0, 0, 0);
+  lightLED(1, 0, 1, 1);
+
 }
 
 void loop()
@@ -193,7 +197,7 @@ void followLine()
   Serial.println(voltageValue);
   float motor_left = 0;
   float motor_right = 0;
-  float motor_base_value = 0.4;
+  float motor_base_value = 0.7;
   if (etapeCouleur && ((
     (voltageValue >= LINE_COLOUR - 0.05 && voltageValue <= LINE_COLOUR + 0.05) ||
     (voltageValue >= LINE_COLOUR2 - 0.05 && voltageValue <= LINE_COLOUR2 + 0.05) ||
@@ -206,7 +210,7 @@ void followLine()
       turnToBeInLine(true);
 
   }
-  else if (voltageValue >= LINE_RIGHT - 0.05 && voltageValue <= LINE_RIGHT + 0.05)
+  else if ((voltageValue >= LINE_RIGHT - 0.05 && voltageValue <= LINE_RIGHT + 0.05) || (voltageValue >= LINE_UNDECIDED - 0.05 && voltageValue <= LINE_UNDECIDED + 0.05))
   {
     motor_right = motor_base_value;
     motor_left = -motor_base_value;
@@ -233,17 +237,15 @@ void detectBowlingPin()
   Serial.println(distance);
   if (distance < 50.00 && distance > 0)
   {
-    AX_BuzzerON(250, 100);
-    lightLED(0, 1, 0, 0);
     SOFT_TIMER_Disable(FOLLOW_LINE_TIMER);
-    SOFT_TIMER_Disable(DETECT_BOWLING_PIN_TIMER);
     stopMotor();
+    lightLED(1, 1, 1, 1);
 
     turnedRobot(-90);
     delay(500);
     /* SOFT_TIMER_Enable(FOLLOW_LINE_TIMER); */
 
-    findLineAgain();
+    /* findLineAgain(); */
     //tourner vers la droite
     //CONTINUER D'AVANCER JUSQU'À
     //V
@@ -251,6 +253,8 @@ void detectBowlingPin()
     //recommence FOLLOW_LINE_TIMER
     //TROUVER INTERSECTION
     //DONNE LE CODE A ALEX
+
+    SOFT_TIMER_Disable(DETECT_BOWLING_PIN_TIMER);
   }
   //Prend en note à chaques fois qu'elle le détecte
 }
@@ -260,13 +264,13 @@ void findLineAgain()
   delay(1000);
   readEncoder0 = 0;
   readEncoder1 = 0;
-  motorLeft = 400;
+  motorLeft = 0.35;
   motorRight = 0;
   sumError = 0;
 
   ENCODER_Reset(RIGHT_WHEEL);
   ENCODER_Reset(LEFT_WHEEL);
-  float voltageValue = analogRead(ANALOG_LINE_FOLLOWER) * (5 / 1023.0);
+  float voltageValue = 0;
   Serial.println(voltageValue);
   while (voltageValue < 1)
   {
@@ -619,12 +623,12 @@ void detectSound()
 {
   float voltageValue = analogRead(ANALOG_BUZZER) * (5 / 1023.0);
   Serial.println(voltageValue);
-  float target = 0.13;
-  if (voltageValue >= target /*Valeur qu'on voudra */)
+  float target = 0.15;
+  if (voltageValue >= target)
   {
-    lightLED(0, 0, 0, 1);
-    SOFT_TIMER_Disable(DETECT_SOUND_TIMER);
-    SOFT_TIMER_Enable(DETECT_BOWLING_PIN_TIMER);
+    //lightLED(1, 1, 1, 1);
+    /* SOFT_TIMER_Disable(DETECT_SOUND_TIMER);
+    SOFT_TIMER_Enable(DETECT_BOWLING_PIN_TIMER); */
   }
 }
 
