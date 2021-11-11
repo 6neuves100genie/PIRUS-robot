@@ -25,12 +25,9 @@
 #define DETECT_SOUND_TIMER 3
 
 // OBP-704 possible values for suiveur de ligne
-#define LINE_LEFT 1.02    // 1 0 0
-#define LINE_RIGHT 1.90   // 0 0 1
-#define LINE_COLOUR 0.57  // 0 1 0
-#define LINE_COLOUR2 2.42 // 0 1 1
-#define LINE_COLOUR3 1.50 // 1 1 0
-#define LINE_COLOUR4 3.34 // 1 1 1
+#define LINE_LEFT 1.45   
+#define LINE_RIGHT 2.80   
+#define INTERSECTION 0.79
 
 #define LINE_UNDECIDED 2.88
 
@@ -97,19 +94,19 @@ volatile bool encoderEqual = false;
 #define NBR_ANGLEb 3
 #define NBR_ANGLEbr 4
 float tabDistance[NBR_DISTANCE] = {0, 45};
-float tabDistancer[NBR_DISTANCEr] = {220};
-float tabDistancerr[NBR_DISTANCErr] = {0, 220};
-float tabDistancej[NBR_DISTANCEj] = {0, 40, 220};
-float tabDistancejr[NBR_DISTANCEjr] = {0, 220, 40, 75};
-float tabDistanceb[NBR_DISTANCEb] = {0, 40, 220};
-float tabDistancebr[NBR_DISTANCEbr] = {0, 220, 40, 75};
-int tabAngle[NBR_ANGLE] = {180, 0};
+float tabDistancer[NBR_DISTANCEr] = {215};
+float tabDistancerr[NBR_DISTANCErr] = {0, 215};
+float tabDistancej[NBR_DISTANCEj] = {0, 40, 215};
+float tabDistancejr[NBR_DISTANCEjr] = {0, 215, 40, 75};
+float tabDistanceb[NBR_DISTANCEb] = {0, 40, 215};
+float tabDistancebr[NBR_DISTANCEbr] = {0, 215, 40, 75};
+int tabAngle[NBR_ANGLE] = {185, 0};
 int tabAngler[NBR_ANGLEr] = {0};
-int tabAnglerr[NBR_ANGLErr] = {180, 0};
-int tabAnglej[NBR_ANGLEj] = {-90, 90, 0};
-int tabAnglejr[NBR_ANGLEjr] = {180, -90, 90, 0};
-int tabAngleb[NBR_ANGLEbr] = {90, -90, 0};
-int tabAnglebr[NBR_ANGLEbr] = {180, 90, -90, 0};
+int tabAnglerr[NBR_ANGLErr] = {-180, 0};
+int tabAnglej[NBR_ANGLEj] = {-89, 91, 0};
+int tabAnglejr[NBR_ANGLEjr] = {-182, -90, 90, 0};
+int tabAngleb[NBR_ANGLEb] = {89, -91, 0};
+int tabAnglebr[NBR_ANGLEbr] = {-180, 90, -90, 0};
 int tmpValueTab;
 bool etapeCouleur = false;
 
@@ -136,7 +133,7 @@ int detectColor();
 void bringToRightColour();
 void stopMotor();
 void servoMoteur(int angle);
-/* void init_Detection5kHz();*/
+void init_Detection5kHz();
 void detectSound();
 void lightLED(bool red, bool green, bool blue, bool yellow);
 void initLEDsPin();
@@ -148,9 +145,6 @@ void setup()
   initLEDsPin();
   readEncoder0 = 0;
   readEncoder1 = 0;
-  /* SERVO_Enable(0);
-  SERVO_Enable(1);
-  servoMoteur(150); */
   SOFT_TIMER_SetCallback(FOLLOW_LINE_TIMER, followLine);
   SOFT_TIMER_SetCallback(DETECT_BOWLING_PIN_TIMER, detectBowlingPin);
   SOFT_TIMER_SetCallback(DETECT_SOUND_TIMER, detectSound);
@@ -159,7 +153,7 @@ void setup()
   //SOFT_TIMER_SetDelay(int id, int ms)
   SOFT_TIMER_SetDelay(FOLLOW_LINE_TIMER, 2);
   SOFT_TIMER_SetDelay(DETECT_BOWLING_PIN_TIMER, 150);
-  SOFT_TIMER_SetDelay(DETECT_SOUND_TIMER, 50);
+  SOFT_TIMER_SetDelay(DETECT_SOUND_TIMER, 20);
 
   //Ajout du nombre de fois qu'il répétera la fonction (-1 = infini);
   //SOFT_TIMER_SetRepetition(int id, int nbFois)
@@ -170,9 +164,9 @@ void setup()
   //détermine si le timer pour la fonction et activé ou désactivé.
   //SOFT_TIMER_Enable(int id);
   //SOFT_TIMER_disable(int id);
-  /* SOFT_TIMER_Enable(FOLLOW_LINE_TIMER); */
-  /* SOFT_TIMER_Enable(DETECT_BOWLING_PIN_TIMER); */
-  SOFT_TIMER_Enable(DETECT_SOUND_TIMER);
+  SOFT_TIMER_Enable(FOLLOW_LINE_TIMER);
+  SOFT_TIMER_Enable(DETECT_BOWLING_PIN_TIMER);
+  //SOFT_TIMER_Enable(DETECT_SOUND_TIMER);
   
   lightLED(1, 0, 0, 0);
   delay(500);
@@ -184,7 +178,8 @@ void setup()
 
 void loop()
 {
-  SOFT_TIMER_Update();
+ porterBalle();
+ // SOFT_TIMER_Update();
 }
 
 void followLine()
@@ -197,8 +192,8 @@ void followLine()
   Serial.println(voltageValue);
   float motor_left = 0;
   float motor_right = 0;
-  float motor_base_value = 0.7;
-  if (etapeCouleur && ((
+  float motor_base_value = 0.5;
+ /* if (etapeCouleur && ((
     (voltageValue >= LINE_COLOUR - 0.05 && voltageValue <= LINE_COLOUR + 0.05) ||
     (voltageValue >= LINE_COLOUR2 - 0.05 && voltageValue <= LINE_COLOUR2 + 0.05) ||
     (voltageValue >= LINE_COLOUR3 - 0.05 && voltageValue <= LINE_COLOUR3 + 0.05) ||
@@ -209,8 +204,8 @@ void followLine()
       turnedRobot(45);
       turnToBeInLine(true);
 
-  }
-  else if ((voltageValue >= LINE_RIGHT - 0.05 && voltageValue <= LINE_RIGHT + 0.05) || (voltageValue >= LINE_UNDECIDED - 0.05 && voltageValue <= LINE_UNDECIDED + 0.05))
+  }*/
+  /*else*/ if ((voltageValue >= LINE_RIGHT - 0.05 && voltageValue <= LINE_RIGHT + 0.05) || (voltageValue >= LINE_UNDECIDED - 0.05 && voltageValue <= LINE_UNDECIDED + 0.05))
   {
     motor_right = motor_base_value;
     motor_left = -motor_base_value;
@@ -234,7 +229,8 @@ void detectBowlingPin()
 {
   //Mesurer avec l'infrarouge ou le sonar
   float distance = SONAR_GetRange(1);
-  Serial.println(distance);
+  float voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
+  //Serial.println(distance);
   if (distance < 50.00 && distance > 0)
   {
     SOFT_TIMER_Disable(FOLLOW_LINE_TIMER);
@@ -243,9 +239,9 @@ void detectBowlingPin()
 
     turnedRobot(-90);
     delay(500);
-    /* SOFT_TIMER_Enable(FOLLOW_LINE_TIMER); */
+    SOFT_TIMER_Enable(FOLLOW_LINE_TIMER);
 
-    /* findLineAgain(); */
+    //findLineAgain();
     //tourner vers la droite
     //CONTINUER D'AVANCER JUSQU'À
     //V
@@ -253,7 +249,9 @@ void detectBowlingPin()
     //recommence FOLLOW_LINE_TIMER
     //TROUVER INTERSECTION
     //DONNE LE CODE A ALEX
-
+    if(voltageValue >= INTERSECTION - 0.05 && voltageValue <= INTERSECTION + 0.05){
+      turnedRobot(90);
+    }
     SOFT_TIMER_Disable(DETECT_BOWLING_PIN_TIMER);
   }
   //Prend en note à chaques fois qu'elle le détecte
@@ -322,42 +320,61 @@ void turnToBeInLine(bool sens){
     }
   }
 }
-int detectcolor()
+int detectColor()
 {
+
   uint16_t clear, red, green, blue;
   char couleur[1];
   capteur.begin();
   delay(250); // takes 50ms to read
   capteur.getRawData(&red, &green, &blue, &clear);
 
-  if (red > 250 && green > 250 && blue > 100)
+  if (red > 500 && red < 600 && green > 525 && green < 625 && blue > 310 && blue < 410)
   {
+    lightLED(0, 0, 0, 1);
     couleur[0] = 'j'; //test
     Serial.print(" \ncouleur\t ");
     Serial.print(couleur); //test
     return 1;
   }
-  else if (red > 200 && green > 100 && blue < green)
+  else if (red > 450 && red < 550 && green > 375 && green < 475 && blue > 320 && blue < 430)
   {
+    lightLED(1, 0, 0, 0);
     couleur[0] = 'r'; //test
     Serial.print(" \ncouleur\t ");
     Serial.print(couleur); //test
     return 2;
   }
-  else
+  else if (red > 350 && red < 450 && green > 460 && green < 560 && blue > 370 && blue < 470)
   {
+    lightLED(0, 0, 1, 0);
     couleur[0] = 'b'; //test
     Serial.print(" \ncouleur\t ");
     Serial.print(couleur); //test
     return 3;
   }
+  Serial.print("C:\t"); Serial.print(clear);
+    Serial.print("\tR:\t"); Serial.print(red);
+    Serial.print("\tG:\t"); Serial.print(green);
+    Serial.print("\tB:"); Serial.print(blue);
+	Serial.println(" ");
   return 0;
 }
 
 void porterBalle()
 {
+servoMoteur(150);
+int couleur=detectColor();
+if(couleur==0){
+  delay(500);
+ couleur= detectColor();}
+ if(couleur==0){
+   delay(500);
+ couleur= detectColor();}
 
-  int couleur = detectColor();
+ if(couleur==0){
+   delay(500);
+ couleur= detectColor();}
   delay(2000);
   for (int i = 0; NBR_DISTANCE > i; i++)
   {
@@ -626,9 +643,9 @@ void detectSound()
   float target = 0.15;
   if (voltageValue >= target)
   {
-    //lightLED(1, 1, 1, 1);
-    /* SOFT_TIMER_Disable(DETECT_SOUND_TIMER);
-    SOFT_TIMER_Enable(DETECT_BOWLING_PIN_TIMER); */
+    lightLED(1, 1, 1, 1);
+    SOFT_TIMER_Disable(DETECT_SOUND_TIMER);
+    SOFT_TIMER_Enable(DETECT_BOWLING_PIN_TIMER);
   }
 }
 
@@ -648,14 +665,14 @@ void initLEDsPin()
   pinMode(DIGITAL_YELLOW_LED, OUTPUT);
 }
 
-/* void init_Detection5kHz(){
+void init_Detection5kHz(){
   PORTK |= (1<<7); //active PULL_DOWN A15
   PCICR |= (1<<2); //enable PCINT 23
   PCMSK2 |= (1<<7);
   sei();
 }
 
-ISR(PCINT2_vect){
+/*ISR(PCINT2_vect){
   SOFT_TIMER_Disable(FOLLOW_LINE_TIMER);
 
 } */
