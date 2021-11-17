@@ -107,7 +107,7 @@ void setup()
 
   readEncoder0 = 0;
   readEncoder1 = 0;
-  servoMoteur(150);
+  //servoMoteur(150);
 
   //Step = FALLOW_LINE1;
 
