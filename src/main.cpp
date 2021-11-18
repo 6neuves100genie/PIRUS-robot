@@ -14,6 +14,9 @@
 #include <Sen0348_Digital/DFRobot_ID809.h>
 #include <stdlib.h>
 #include <Adafruit_TCS34725.h>
+#include <SPI.h>
+#include <nRF24L01.h>
+#include <RF24.h>
 
 #define RIGHT_WHEEL 1
 #define LEFT_WHEEL 0
@@ -69,7 +72,18 @@ int distanceEncodeur;
 float motorLeft = 0;
 float motorRight = 0;
 
+//SERVOMOTOR
 int angleMoteur;
+
+//NRF24L01
+RF24 radio(7, 8); // CE, CSN
+const byte address[6] = "00001";
+char text[32] = "";
+
+void NRF24L01_Init();
+void NRF24L01_TransmitData(char * data, uint8_t size);
+void NRF24L01_ReceiveData(char * data, uint8_t size);
+
 
 typedef enum _step
 {
@@ -98,11 +112,12 @@ int detectColor();
 
 void setup()
 {
-  BoardInit();
-
+  //BoardInit();
+  Serial.begin(9600);
+  NRF24L01_Init();
   delay(2000);
 
-  timerInit(TIMER_LINE_FALLOWER, timerDetectionLineFallower, 2, -1);
+  //timerInit(TIMER_LINE_FALLOWER, timerDetectionLineFallower, 2, -1);
 
 
   readEncoder0 = 0;
@@ -111,15 +126,21 @@ void setup()
 
   //Step = FALLOW_LINE1;
 
-  SOFT_TIMER_Enable(TIMER_LINE_FALLOWER); //active suiveur de ligne
+  //SOFT_TIMER_Enable(TIMER_LINE_FALLOWER); //active suiveur de ligne
 
 }
 
 void loop()
 {
-  SOFT_TIMER_Update();
+  //SOFT_TIMER_Update();
 
-  executeStep();
+  if (radio.available()) {
+    //NRF24L01_ReceiveData(text, sizeof(text));
+    radio.read(&text, sizeof(text));
+    Serial.println(text);
+  }
+
+  //executeStep();
 }
 
 void executeStep()
@@ -196,7 +217,7 @@ void timerInit(uint8_t id, void (*func)(), unsigned long delay, int32_t nrep)
 void timerDetectionLineFallower()
 {
   voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
-  Serial.println(voltageValue);
+  //Serial.println(voltageValue);
 }
 
 void stopMotor()
@@ -411,3 +432,33 @@ void servoMoteur(int angle)
   }
   angleMoteur = angle;
 }
+
+void NRF24L01_Init(){
+
+  radio.begin();
+  //receiver
+  radio.openReadingPipe(0, address);
+
+  //transmitter
+  radio.openWritingPipe(address);
+
+  radio.setPALevel(RF24_PA_MIN);
+
+  radio.startListening();
+}
+
+void NRF24L01_TransmitData(char *data, uint8_t size){
+  radio.stopListening(); 
+
+  radio.write(&data, size);
+
+  delay(500);
+
+  radio.startListening();
+}
+
+void NRF24L01_ReceiveData(char *data, uint8_t size){
+
+  radio.read(&data, size);
+  
+  }
