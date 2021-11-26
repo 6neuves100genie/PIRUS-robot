@@ -74,7 +74,7 @@ float motorRight = 0;
 int angleMoteur;
 
 // NRF24L01
-RF24 radio(7, 8); // CE, CSN
+RF24 radio(48, 49); // CE, CSN
 const byte address[6] = "00001";
 char readDataCarousel[30];
 char sendDataCarousel[] = "1";
@@ -125,8 +125,8 @@ int detectColor();
 
 void setup()
 {
-  //BoardInit();
-  Serial.begin(9600);
+  BoardInit();
+
   NRF24L01_Init();
 
   // timerInit(TIMER_LINE_FALLOWER, timerDetectionLineFallower, 2, -1);
@@ -152,6 +152,7 @@ void loop()
     Serial.println("fonctionne pas...");
 
   delay(1000);
+
   // executeStep();
 }
 
@@ -201,7 +202,6 @@ void executeStep()
 
 void timerInit(uint8_t id, void (*func)(), unsigned long delay, int32_t nrep)
 {
-
   SOFT_TIMER_SetCallback(id, func);
   SOFT_TIMER_SetDelay(id, delay);
   SOFT_TIMER_SetRepetition(id, nrep);
@@ -449,14 +449,13 @@ void NRF24L01_TransmitData(char *data, uint8_t size)
 
 bool turnCarousel()
 {
-
   NRF24L01_TransmitData(sendDataCarousel, sizeof(sendDataCarousel));
 
   int cpt = 0;
   while (!radio.available()){ // attent le retour de commande carousel
     delay(1);
     cpt++;
-    if(cpt >= 1000)
+    if(cpt >= 3000) //evite de rester dans le while  
       return 0;
   } 
 
