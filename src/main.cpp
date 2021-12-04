@@ -392,7 +392,7 @@ int detectColor()
     }
     else  if (xx>815 && xx<865 && yy>695 && yy<740)
     {
-        couleur[0]='j';
+        couleur[0]='g';
         Serial.print(" \ncouleur\t "); Serial.print(couleur);
         return 3;
     }
