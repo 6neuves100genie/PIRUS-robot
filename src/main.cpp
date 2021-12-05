@@ -17,6 +17,10 @@
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h>
+#include <Adafruit_GFX_Library/Adafruit_GFX.h>
+#include <Adafruit_SSD1306_Library/Adafruit_SSD1306.h>
+#include <unistd.h>
+#include <SoftwareSerial.h>
 
 #define RIGHT_WHEEL 1
 #define LEFT_WHEEL 0
@@ -35,6 +39,10 @@ Adafruit_TCS34725 capteur = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_700MS, TC
 #define ANALOG_LINE_FOLLOWER A0
 
 // DIGITALS
+#define PIN_BOUTON_BLEU 35
+#define PIN_BOUTON_VERT 36
+#define COLLECT_NUMBER 3 //Fingerprint sampling times, can be set to 1-3
+#define IRQ 6            //IRQ pin
 
 // WHEEL
 #define ENCODER_STEP 3200
@@ -72,6 +80,51 @@ float motorRight = 0;
 
 // SERVOMOTOR
 int angleMoteur;
+
+//ALCOOTEST
+int analogPin = 1;
+int val = 0;
+
+DFRobot_ID809 fingerprint;
+Adafruit_SSD1306 display(-1);
+
+SoftwareSerial Serialt(53, 3); //RX, TX
+#define FPSerial Serialt
+
+//pour les messages
+char depot[] = "Deposer vos clefs sur le crochet.";
+char identification[] = " appuyer votre doitg sur le TouchID jusqu'a ce qu'il clignote jaune 3 fois, répété cette étape jusqu'a ce qu'il clignotte vert";
+char retrait[] = "Veuillez souffler sur le capteur pour recup vos clefs";
+char debut[] = "Bouton vert pour dépot clefs       Bouton bleu pour retrait clefs";
+char ID_retrait[] = "Appuyer le touch ID jusqu'a ce qu'il clignote bleu 3 fois";
+char test_echoue[] = "Test echoue, veuillez dégriser";
+char test_reussite[] = "Bravo, vous pouvez conduire";
+
+int xDebut, xID, xRetrait, xDepot, xID_R, xTest, xReussite;
+int minDepot;
+int minID;
+int minDebut;
+int minRetrait;
+int minID_R;
+int minTest;
+int minReussite;
+
+//compteur
+int i = 0;
+int y = 0;
+int z = 0;
+int r = 0;
+int p = 0;
+int w = 0;
+
+//gestion ID
+#define VERT 1
+#define ROUGE 2
+#define BLEU 3
+#define BLANC 4
+#define NBR_ID 80
+uint8_t tabID[NBR_ID][2]; // tableau, [ID], [couleur]
+uint8_t cptID;
 
 // NRF24L01
 RF24 radio(48, 49); // CE, CSN
@@ -112,9 +165,7 @@ _identification Identification;
 void executeStep();
 
 // timer function
-void timerInit(uint8_t id, void (*func)(), unsigned long delay, int32_t nrep);
-void timerDetectionLineFallower();
-volatile float voltageValue;
+float voltageValue;
 
 // motor function
 void stopMotor();
@@ -125,25 +176,87 @@ float accelerationDecelerationPID(float pourcentageVitesse, uint8_t acceleration
 void servoMoteur(int angle);
 int detectColor();
 
+int readAlcohol();
+void printAlcohol(int value);
+void fingerprintMatching();
+void fingerprintRegistration();
+void infoReussite();
+void infoEchec();
+void infoID_R();
+void infoID();
+void infoDepot();
+void infoRetrait();
+void infoDebut();
+
+/**
+ * @brief 
+ * 
+ */
 void setup()
 {
   BoardInit();
-
   NRF24L01_Init();
 
-  // timerInit(TIMER_LINE_FALLOWER, timerDetectionLineFallower, 2, -1);
+  //écran
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+
+  display.setTextSize(3);
+  display.setTextColor(WHITE);
+  pinMode(PIN_BOUTON_BLEU, INPUT_PULLUP);
+  pinMode(PIN_BOUTON_VERT, INPUT_PULLUP);
+  display.setTextWrap(false);
+
+  //affichage
+  xDepot = display.width();
+  xID = display.width();
+  xDebut = display.width();
+  xRetrait = display.width();
+  minDepot = -12 * strlen(depot);
+  minID = -12 * strlen(identification);
+  minDebut = -12 * strlen(debut);
+  minRetrait = -12 * strlen(retrait);
+  minID_R = -12 * strlen(ID_retrait);
+  minTest = -12 * strlen(test_echoue);
+  minReussite = -12 * strlen(test_reussite);
+
+  //setup touch ID
+  cptID = 0;
+  for (int i = 0; i < NBR_ID; i++)
+  {
+
+    tabID[i][0] = 0;
+    tabID[i][1] = 0;
+  }
+  FPSerial.begin(115200);
+  /*Take FPSerial as communication serial of fingerprint module*/
+  fingerprint.begin(FPSerial);
+  /*Wait for Serial to open*/
+  while (!Serial)
+    ;
+  /*Test whether the device can properly communicate with mainboard
+    Return true or false
+    */
+  while (fingerprint.isConnected() == false)
+  {
+    Serial.println("Communication with device failed, please check connection");
+    /*Get error code information*/
+    //desc = fingerprint.getErrorDescription();
+    //Serial.println(desc);
+    delay(1000);
+  }
 
   readEncoder0 = 0;
   readEncoder1 = 0;
 
   Step = IDENTIFICATION;
-
-  // SOFT_TIMER_Enable(TIMER_LINE_FALLOWER); //active suiveur de ligne
 }
 
+/**
+ * @brief 
+ * 
+ */
 void loop()
 {
-  // SOFT_TIMER_Update();
 
   bool value = turnCarousel();
   Serial.println(value);
@@ -158,6 +271,10 @@ void loop()
   // executeStep();
 }
 
+/**
+ * @brief 
+ * 
+ */
 void executeStep()
 {
 
@@ -202,25 +319,21 @@ void executeStep()
   }
 }
 
-void timerInit(uint8_t id, void (*func)(), unsigned long delay, int32_t nrep)
-{
-  SOFT_TIMER_SetCallback(id, func);
-  SOFT_TIMER_SetDelay(id, delay);
-  SOFT_TIMER_SetRepetition(id, nrep);
-}
-
-void timerDetectionLineFallower()
-{
-  voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
-  // Serial.println(voltageValue);
-}
-
+/**
+ * @brief 
+ * 
+ */
 void stopMotor()
 {
   MOTOR_SetSpeed(RIGHT_WHEEL, 0);
   MOTOR_SetSpeed(LEFT_WHEEL, 0);
 }
 
+/**
+ * @brief 
+ * 
+ * @param angle 
+ */
 void turnedRobot(int angle)
 {
 
@@ -280,6 +393,11 @@ void turnedRobot(int angle)
   Serial.println(" ");*/
 }
 
+/**
+ * @brief 
+ * 
+ * @param distance 
+ */
 void movingFowardRobot(uint16_t distance)
 {
   // uint16_t distance (CENTIMÈTRE);
@@ -330,6 +448,16 @@ void movingFowardRobot(uint16_t distance)
   Serial.println(" ");*/
 }
 
+/**
+ * @brief 
+ * 
+ * @param pourcentageVitesse 
+ * @param acceleration 
+ * @param deceleration 
+ * @param maxSpeed 
+ * @param speed 
+ * @return float 
+ */
 float accelerationDecelerationPID(float pourcentageVitesse, uint8_t acceleration, uint8_t deceleration, float maxSpeed, float speed)
 {
 
@@ -364,48 +492,66 @@ float accelerationDecelerationPID(float pourcentageVitesse, uint8_t acceleration
   }
 }
 
+/**
+ * @brief 
+ * 
+ * @return int 
+ */
 int detectColor()
 {
-    uint16_t clear, red, green, blue;
-    char couleur[1];
-    delay(50);  // takes 50ms to read
-    capteur.getRawData(&red, &green, &blue, &clear);
+  uint16_t clear, red, green, blue;
+  char couleur[1];
+  delay(50); // takes 50ms to read
+  capteur.getRawData(&red, &green, &blue, &clear);
 
+  float x = (-0.14282 * red) + (1.54924 * green) + (-0.95641 * blue);
+  float y = (-0.32466 * red) + (1.57837 * green) + (-0.73191 * blue);
+  float z = (-0.68202 * red) + (0.77073 * green) + (-0.56332 * blue);
+  float xx = x / (x + y + z);
+  float yy = y / (x + y + z);
 
-    float x =(-0.14282*red)+(1.54924*green)+(-0.95641*blue);
-    float y =(-0.32466*red)+(1.57837*green)+(-0.73191*blue);
-    float z =(-0.68202*red)+(0.77073*green)+(-0.56332*blue);
-    float xx=x/(x+y+z);
-    float yy=y/(x+y+z);
+  if (xx > 815 && xx < 865 && yy > 695 && yy < 740)
+  {
+    couleur[0] = 'r';
+    Serial.print(" \ncouleur\t ");
+    Serial.print(couleur);
+    return 1;
+  }
+  else if (xx > 815 && xx < 865 && yy > 695 && yy < 740)
+  {
+    couleur[0] = 'b';
+    Serial.print(" \ncouleur\t ");
+    Serial.print(couleur);
+    return 2;
+  }
+  else if (xx > 815 && xx < 865 && yy > 695 && yy < 740)
+  {
+    couleur[0] = 'g';
+    Serial.print(" \ncouleur\t ");
+    Serial.print(couleur);
+    return 3;
+  }
 
-    if (xx>815 && xx<865 && yy>695 && yy<740)
-    {
-        couleur[0]='r';
-        Serial.print(" \ncouleur\t "); Serial.print(couleur);
-        return 1;
-    }
-        else if (xx>815 && xx<865 && yy>695 && yy<740)
-    {
-        couleur[0]='b';
-        Serial.print(" \ncouleur\t "); Serial.print(couleur);
-        return 2;
-    }
-    else  if (xx>815 && xx<865 && yy>695 && yy<740)
-    {
-        couleur[0]='g';
-        Serial.print(" \ncouleur\t "); Serial.print(couleur);
-        return 3;
-    }
-
-    Serial.print("C:\t"); Serial.print(clear);
-    Serial.print("\tR:\t"); Serial.print(red);
-    Serial.print("\tG:\t"); Serial.print(green);
-    Serial.print("\tB:"); Serial.print(blue);
-    Serial.print("\t X:"); Serial.print(xx);
-    Serial.print("\tY:"); Serial.print(yy);
-    return 0;
+  Serial.print("C:\t");
+  Serial.print(clear);
+  Serial.print("\tR:\t");
+  Serial.print(red);
+  Serial.print("\tG:\t");
+  Serial.print(green);
+  Serial.print("\tB:");
+  Serial.print(blue);
+  Serial.print("\t X:");
+  Serial.print(xx);
+  Serial.print("\tY:");
+  Serial.print(yy);
+  return 0;
 }
 
+/**
+ * @brief 
+ * 
+ * @param angle 
+ */
 void servoMoteur(int angle)
 {
   if (angle > angleMoteur)
@@ -429,6 +575,10 @@ void servoMoteur(int angle)
   angleMoteur = angle;
 }
 
+/**
+ * @brief 
+ * 
+ */
 void NRF24L01_Init()
 {
   radio.begin();
@@ -440,6 +590,12 @@ void NRF24L01_Init()
   radio.setPALevel(RF24_PA_MIN);
 }
 
+/**
+ * @brief 
+ * 
+ * @param data 
+ * @param size 
+ */
 void NRF24L01_TransmitData(char *data, uint8_t size)
 {
   radio.stopListening();
@@ -450,19 +606,26 @@ void NRF24L01_TransmitData(char *data, uint8_t size)
   radio.startListening();
 }
 
+/**
+ * @brief 
+ * 
+ * @return true 
+ * @return false 
+ */
 bool turnCarousel()
 {
   NRF24L01_TransmitData(sendDataCarousel, sizeof(sendDataCarousel));
 
   int cpt = 0;
-  while (!radio.available()){ // attent le retour de commande carousel
+  while (!radio.available())
+  { // attent le retour de commande carousel
     delay(1);
     cpt++;
-    if(cpt >= 3000) //evite de rester dans le while  
+    if (cpt >= 3000) //evite de rester dans le while
       return 0;
-  } 
-
-  radio.read(&readDataCarousel, 1);
+  }
+  Serial.println("OUI");
+  radio.read(&readDataCarousel, sizeof(readDataCarousel));
   Serial.println(readDataCarousel);
   radio.flush_rx();
 
@@ -472,65 +635,402 @@ bool turnCarousel()
     return 0;
 }
 
-void suiveur_ligne(){
-  
-Serial.println(voltageValue);
-MOTOR_SetSpeed(LEFT_WHEEL,0);
-MOTOR_SetSpeed(RIGHT_WHEEL,0);
-voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
-Serial.println(voltageValue);
-while (voltageValue>0&&voltageValue<4)
-    {
-        MOTOR_SetSpeed(LEFT_WHEEL,-0.3);
-        MOTOR_SetSpeed(RIGHT_WHEEL,-0.3);
-        voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
-        Serial.println(voltageValue);
-        if (voltageValue>1.4&&voltageValue<1.5)
-            {
-            gauche();
-            }
-        if (voltageValue>0.6&&voltageValue<0.8)
-            {
-            droite();
-            }
-            delay(100);
-            voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
-    }
-MOTOR_SetSpeed(LEFT_WHEEL,0);
-MOTOR_SetSpeed(RIGHT_WHEEL,0);
-delay(5000);
-Serial.println("fin");
+/**
+ * @brief 
+ * 
+ */
+void suiveur_ligne()
+{
 
-}
-
-
-
-void gauche(){
-    Serial.println("gauche");
-    for(voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);voltageValue<2.7 || voltageValue>2.9;)
-    {
-    MOTOR_SetSpeed(LEFT_WHEEL,-0.3);
-    MOTOR_SetSpeed(RIGHT_WHEEL,-0.4);
+  Serial.println(voltageValue);
+  MOTOR_SetSpeed(LEFT_WHEEL, 0);
+  MOTOR_SetSpeed(RIGHT_WHEEL, 0);
+  voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
+  Serial.println(voltageValue);
+  while (voltageValue > 0 && voltageValue < 4)
+  {
+    MOTOR_SetSpeed(LEFT_WHEEL, -0.3);
+    MOTOR_SetSpeed(RIGHT_WHEEL, -0.3);
     voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
     Serial.println(voltageValue);
+    if (voltageValue > 1.4 && voltageValue < 1.5)
+    {
+      gauche();
     }
-    for(int i=0;i<1;i++){
-    MOTOR_SetSpeed(LEFT_WHEEL,-0.4);
-    MOTOR_SetSpeed(RIGHT_WHEEL,-0.3);
-    delay(50);
+    if (voltageValue > 0.6 && voltageValue < 0.8)
+    {
+      droite();
     }
+    delay(100);
+    voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
+  }
+  MOTOR_SetSpeed(LEFT_WHEEL, 0);
+  MOTOR_SetSpeed(RIGHT_WHEEL, 0);
+  delay(5000);
+  Serial.println("fin");
 }
 
-void droite(){
-     Serial.println("droite");
-    for(voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);voltageValue<2.7 ||voltageValue>2.9;){
-    MOTOR_SetSpeed(LEFT_WHEEL,-0.4);
-    MOTOR_SetSpeed(RIGHT_WHEEL,-0.3);
+/**
+ * @brief 
+ * 
+ */
+void gauche()
+{
+  Serial.println("gauche");
+  for (voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0); voltageValue < 2.7 || voltageValue > 2.9;)
+  {
+    MOTOR_SetSpeed(LEFT_WHEEL, -0.3);
+    MOTOR_SetSpeed(RIGHT_WHEEL, -0.4);
     voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
-    Serial.println(voltageValue);}
-    for(int i=0;i<1;i++){
-    MOTOR_SetSpeed(LEFT_WHEEL,-0.3);
-    MOTOR_SetSpeed(RIGHT_WHEEL,-0.4);
+    Serial.println(voltageValue);
+  }
+  for (int i = 0; i < 1; i++)
+  {
+    MOTOR_SetSpeed(LEFT_WHEEL, -0.4);
+    MOTOR_SetSpeed(RIGHT_WHEEL, -0.3);
     delay(50);
+  }
+}
+
+/**
+ * @brief 
+ * 
+ */
+void droite()
+{
+  Serial.println("droite");
+  for (voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0); voltageValue < 2.7 || voltageValue > 2.9;)
+  {
+    MOTOR_SetSpeed(LEFT_WHEEL, -0.4);
+    MOTOR_SetSpeed(RIGHT_WHEEL, -0.3);
+    voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
+    Serial.println(voltageValue);
+  }
+  for (int i = 0; i < 1; i++)
+  {
+    MOTOR_SetSpeed(LEFT_WHEEL, -0.3);
+    MOTOR_SetSpeed(RIGHT_WHEEL, -0.4);
+    delay(50);
+  }
+}
+
+/**
+ * @brief 
+ * 
+ */
+void infoDebut()
+{
+  display.clearDisplay();
+  display.setCursor(0, 7);
+  display.setTextSize(1);
+  display.print("Debut");
+  display.setTextSize(2);
+  display.setCursor(xDebut, 15);
+  display.print(debut);
+  display.display();
+  xDebut = xDebut - 4;
+  if (xDebut < minDebut)
+    xDebut = display.width();
+}
+
+/**
+ * @brief 
+ * 
+ */
+void infoRetrait()
+{
+  display.clearDisplay();
+  display.setCursor(0, 7);
+  display.setTextSize(1);
+  display.print("Retrait");
+  display.setTextSize(2);
+  display.setCursor(xRetrait, 15);
+  display.print(retrait);
+  display.display();
+  xRetrait = xRetrait - 4;
+  if (xRetrait < minRetrait)
+    xRetrait = display.width();
+}
+
+/**
+ * @brief 
+ * 
+ */
+void infoDepot()
+{
+  display.clearDisplay();
+  display.setCursor(0, 7);
+  display.setTextSize(1);
+  display.print("Depot");
+  display.setTextSize(2);
+  display.setCursor(xDepot, 15);
+  display.print(depot);
+  display.display();
+  xDepot = xDepot - 4;
+  if (xDepot < minDepot)
+    xDepot = display.width();
+}
+
+/**
+ * @brief 
+ * 
+ */
+void infoID()
+{
+  display.clearDisplay();
+  display.setCursor(0, 7);
+  display.setTextSize(1);
+  display.print("ID");
+  display.setTextSize(2);
+  display.setCursor(xID, 15);
+  display.print(identification);
+  display.display();
+  xID = xID - 4;
+  if (xID < minID)
+    xID = display.width();
+}
+
+/**
+ * @brief 
+ * 
+ */
+void infoID_R()
+{
+  display.clearDisplay();
+  display.setCursor(0, 7);
+  display.setTextSize(1);
+  display.print("BITE");
+  display.setTextSize(2);
+  display.setCursor(xID_R, 15);
+  display.print(ID_retrait);
+  display.display();
+  xID_R = xID_R - 7;
+  if (xID_R < minID_R)
+    xID_R = display.width();
+}
+
+/**
+ * @brief 
+ * 
+ */
+void infoEchec()
+{
+  display.clearDisplay();
+  display.setCursor(0, 7);
+  display.setTextSize(1);
+  display.print("Echec");
+  display.setTextSize(2);
+  display.setCursor(xTest, 15);
+  display.print(test_echoue);
+  display.display();
+  xTest = xTest - 7;
+  if (xTest < minTest)
+    xTest = display.width();
+}
+
+/**
+ * @brief 
+ * 
+ */
+void infoReussite()
+{
+  display.clearDisplay();
+  display.setCursor(0, 7);
+  display.setTextSize(1);
+  display.print("Reussite");
+  display.setTextSize(2);
+  display.setCursor(xReussite, 15);
+  display.print(test_reussite);
+  display.display();
+  xReussite = xReussite - 7;
+  if (xReussite < minReussite)
+    xReussite = display.width();
+}
+
+/**
+ * @brief 
+ * 
+ */
+void fingerprintRegistration()
+{
+  uint8_t ID, i;
+  /*Compare the captured fingerprint with all fingerprints in the fingerprint library
+    Return fingerprint ID number(1-80) if succeed, return 0 when failed
+    Function: clear the last captured fingerprint image
+   */
+  fingerprint.search(); //Can add "if else" statement to judge whether the fingerprint has been registered.
+  /*Get a unregistered ID for saving fingerprint 
+    Return ID number when succeed 
+    Return ERR_ID809 if failed
+   */
+  if ((ID = fingerprint.getEmptyID()) == ERR_ID809)
+  {
+    while (1)
+    {
+      /*Get error code imformation*/
+      //desc = fingerprint.getErrorDescription();
+      //Serial.println(desc);
+      delay(1000);
     }
+  }
+  Serial.print("Unregistered ID,ID=");
+  Serial.println(ID);
+  i = 0; //Clear sampling times
+  /*Fingerprint Sampling 3 times */
+  while (i < COLLECT_NUMBER)
+  {
+    /*Set fingerprint LED ring to breathing lighting in blue*/
+    fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eBreathing, /*LEDColor = */ fingerprint.eLEDBlue, /*blinkCount = */ 0);
+    Serial.print("The fingerprint sampling of the");
+    Serial.print(i + 1);
+    Serial.println("(th) time is being taken");
+    Serial.println("Please press down your finger");
+    /*Capture fingerprint image, 10s idle timeout 
+      If succeed return 0, otherwise return ERR_ID809
+     */
+    if ((fingerprint.collectionFingerprint(/*timeout = */ 10)) != ERR_ID809)
+    {
+      /*Set fingerprint LED ring to quick blink in yellow 3 times*/
+      fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDYellow, /*blinkCount = */ 3);
+      Serial.println("Capturing succeeds");
+      i++; //Sampling times +1
+    }
+    else
+    {
+      Serial.println("Capturing fails");
+      /*Get error code information*/
+      //desc = fingerprint.getErrorDescription();
+      //Serial.println(desc);
+    }
+    Serial.println("Please release your finger");
+    /*Wait for finger to release
+      Return 1 when finger is detected, otherwise return 0 
+     */
+    while (fingerprint.detectFinger())
+      ;
+  }
+
+  /*Save fingerprint information into an unregistered ID*/
+  if (fingerprint.storeFingerprint(/*Empty ID = */ ID) != ERR_ID809)
+  {
+
+    tabID[cptID++][0] = ID;
+
+    Serial.print("Saving succeed，ID=");
+    Serial.println(ID);
+    /*Set fingerprint LED ring to always ON in green*/
+    fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eKeepsOn, /*LEDColor = */ fingerprint.eLEDGreen, /*blinkCount = */ 0);
+    delay(1000);
+    /*Turn off fingerprint LED ring */
+    fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eNormalClose, /*LEDColor = */ fingerprint.eLEDBlue, /*blinkCount = */ 0);
+  }
+  else
+  {
+    Serial.println("Saving failed");
+    /*Get error code information*/
+    //desc = fingerprint.getErrorDescription();
+    //Serial.println(desc);
+  }
+  Serial.println("-----------------------------");
+}
+
+/**
+ * @brief 
+ * 
+ */
+void fingerprintMatching()
+{
+  /*Compare the captured fingerprint with all fingerprints in the fingerprint library
+    Return fingerprint ID number(1-80) if succeed, return 0 when failed
+   */
+  uint8_t ret = fingerprint.search();
+  if (ret != 0)
+  {
+    /*Set fingerprint LED ring to always ON in green*/
+    fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eKeepsOn, /*LEDColor = */ fingerprint.eLEDGreen, /*blinkCount = */ 0);
+    Serial.print("Successfully matched,ID=");
+    Serial.println(ret);
+  }
+  else
+  {
+    /*Set fingerprint LED Ring to always ON in red*/
+    fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eKeepsOn, /*LEDColor = */ fingerprint.eLEDRed, /*blinkCount = */ 0);
+    Serial.println("Matching failed");
+  }
+  delay(1000);
+  /*Turn off fingerprint LED Ring*/
+  fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eNormalClose, /*LEDColor = */ fingerprint.eLEDBlue, /*blinkCount = */ 0);
+  Serial.println("-----------------------------");
+}
+/**
+ * @brief 
+ * 
+ * @param value 
+ */
+void printAlcohol(int value)
+{
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setCursor(45, 10);
+  display.println(val);
+  display.display();
+}
+
+/**
+ * @brief 
+ * 
+ * @return int 
+ */
+int readAlcohol()
+{
+  int val = 0;
+  int val1;
+  int val2;
+  int val3;
+  int val4;
+  int val5;
+  int val6;
+  int val7;
+
+  int val8;
+  int val9;
+  int val10;
+  int val11;
+  int val12;
+  int val13;
+  int val14;
+  int val15;
+
+  display.clearDisplay();
+  val1 = analogRead(analogPin);
+  delay(20);
+  val2 = analogRead(analogPin);
+  delay(20);
+  val3 = analogRead(analogPin);
+  delay(20);
+  val4 = analogRead(analogPin);
+  delay(20);
+  val5 = analogRead(analogPin);
+  delay(20);
+  val6 = analogRead(analogPin);
+  delay(20);
+  val7 = analogRead(analogPin);
+  delay(20);
+  val8 = analogRead(analogPin);
+  delay(20);
+  val9 = analogRead(analogPin);
+  delay(20);
+  val10 = analogRead(analogPin);
+  delay(20);
+  val11 = analogRead(analogPin);
+  delay(20);
+  val13 = analogRead(analogPin);
+  delay(20);
+  val14 = analogRead(analogPin);
+  delay(20);
+  val5 = analogRead(analogPin);
+
+  val = (val1 + val2 + val3 + val4 + val5 + val6 + val7 + val8 + val9 + val10 + val11 + val12 + val13 + val14 + val15) / 15;
+  return val;
 }
