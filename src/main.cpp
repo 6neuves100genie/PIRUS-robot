@@ -33,7 +33,7 @@ Adafruit_TCS34725 capteur = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_700MS, TC
 
 // ANALOGS
 #define ANALOG_LINE_FOLLOWER A0
-
+#define PIN_ANALOG_CLE A2
 // DIGITALS
 
 // WHEEL
@@ -78,13 +78,16 @@ RF24 radio(48, 49); // CE, CSN
 const byte address[6] = "00001";
 char readDataCarousel[30];
 char sendDataCarousel[] = "1";
-
+void movingReverseRobot(uint16_t distance);
 void NRF24L01_Init();
 void NRF24L01_TransmitData(char *data, uint8_t size);
 bool turnCarousel();
 void suiveur_ligne();
 void gauche();
 void droite();
+int detecterCle(int retrait);     //0=depot   1=retrait
+void turnedRobot180();
+void manipul(int fonction);
 // step to follow
 typedef enum _step
 {
@@ -136,26 +139,15 @@ void setup()
   readEncoder0 = 0;
   readEncoder1 = 0;
 
-  Step = IDENTIFICATION;
+  Step =GO_TO_CAROUSEL;// IDENTIFICATION;
 
   // SOFT_TIMER_Enable(TIMER_LINE_FALLOWER); //active suiveur de ligne
 }
 
 void loop()
 {
-  // SOFT_TIMER_Update();
-
-  bool value = turnCarousel();
-  Serial.println(value);
-
-  if (value)
-    Serial.println("fonctionne!!!");
-  else
-    Serial.println("fonctionne pas...");
-
-  delay(1000);
-
-  // executeStep();
+ //detectColor();
+  executeStep();
 }
 
 void executeStep()
@@ -164,13 +156,17 @@ void executeStep()
   switch (Step)
   {
   case IDENTIFICATION:
-
+    
     Step = GO_TO_CAROUSEL;
     break;
 
   case GO_TO_CAROUSEL:
-
-    Step = FIND_GOOD_KEY;
+    //suiveur_ligne();
+   /* delay(2000);
+    bool val = turnCarousel();
+    Serial.println(val);*/
+    //Step = FIND_GOOD_KEY;
+    detectColor();
     break;
 
   case FIND_GOOD_KEY:
@@ -223,7 +219,6 @@ void stopMotor()
 
 void turnedRobot(int angle)
 {
-
   uint8_t angleTmp;
   if (angle < 0)
     angleTmp = angle * -1;
@@ -280,10 +275,8 @@ void turnedRobot(int angle)
   Serial.println(" ");*/
 }
 
-void movingFowardRobot(uint16_t distance)
-{
-  // uint16_t distance (CENTIMÈTRE);
-  // bool sens (0 = à l'envers. 1 = à l'endroit);
+void movingFowardRobot(uint16_t distance){
+
   distanceEncodeur = (distance / RESOLUTION_ENCODER);
   readEncoder0 = 0;
   readEncoder1 = 0;
@@ -291,23 +284,17 @@ void movingFowardRobot(uint16_t distance)
   motorRight = 0;
   sumError = 0;
 
-  ENCODER_Reset(RIGHT_WHEEL);
+  ENCODER_Reset(RIGHT_WHEEL); 
   ENCODER_Reset(LEFT_WHEEL);
 
-  while (((distanceEncodeur) > readEncoder0) && ((distanceEncodeur) > readEncoder1))
-  {
 
-    readEncoder0 = ENCODER_Read(LEFT_WHEEL);
-    readEncoder1 = ENCODER_Read(RIGHT_WHEEL);
+  while(((distanceEncodeur ) > readEncoder0) && ((distanceEncodeur) > readEncoder1)){
 
-    float pourcentageVitesse = float(readEncoder0 / distanceEncodeur) * 100;
+    readEncoder0 = ENCODER_Read(LEFT_WHEEL)*-1;  
+    readEncoder1 = ENCODER_Read(RIGHT_WHEEL)*-1;
 
-    if (distance > 80)
-      motorLeft = accelerationDecelerationPID(pourcentageVitesse, ACCELERATION_HIGH_DISTANCE, DECCELERATION_HIGH_DISTANCE, SPEED_MAX_HIGH_DISTANCE, motorLeft);
-    else
-      motorLeft = accelerationDecelerationPID(pourcentageVitesse, ACCELERATION_LOW_DISTANCE, DECCELERATION_LOW_DISTANCE, SPEED_MAX_LOW_DISTANCE, motorLeft);
-
-    // PID FOR ENCODER
+    //float pourcentageVitesse = float(readEncoder0/distanceEncodeur) * 100; 
+    //PID FOR ENCODER
     float error = readEncoder0 - readEncoder1;
     float p = error * KP_FOWARD;
 
@@ -317,18 +304,49 @@ void movingFowardRobot(uint16_t distance)
     float adjSpeed = p + i;
     motorRight = motorLeft + adjSpeed;
 
-    MOTOR_SetSpeed(LEFT_WHEEL, motorLeft);
-    MOTOR_SetSpeed(RIGHT_WHEEL, motorRight);
+    
+    MOTOR_SetSpeed(LEFT_WHEEL, -0.2);
+    MOTOR_SetSpeed(RIGHT_WHEEL, -0.2);
+
   }
-
-  stopMotor();
-
-  /*Serial.println(distance);
-  Serial.println(distanceEncodeur);
-  Serial.println(readEncoder0);
-  Serial.println(readEncoder1);
-  Serial.println(" ");*/
 }
+
+void movingReverseRobot(uint16_t distance){
+  // uint16_t distance (CENTIMÈTRE);
+  // bool sens (0 = à l'envers. 1 = à l'endroit);
+  distanceEncodeur = (distance / RESOLUTION_ENCODER);
+  readEncoder0 = 0;
+  readEncoder1 = 0;
+  motorLeft = 0;
+  motorRight = 0;
+  sumError = 0;
+
+  ENCODER_Reset(RIGHT_WHEEL); 
+  ENCODER_Reset(LEFT_WHEEL);
+
+
+  while(((distanceEncodeur ) > readEncoder0) && ((distanceEncodeur) > readEncoder1)){
+
+    readEncoder0 = ENCODER_Read(LEFT_WHEEL);  
+    readEncoder1 = ENCODER_Read(RIGHT_WHEEL);
+
+    //float pourcentageVitesse = float(readEncoder0/distanceEncodeur) * 100; 
+    //PID FOR ENCODER
+    float error = readEncoder0 - readEncoder1;
+    float p = error * KP_FOWARD;
+
+    sumError += error;
+    float i = sumError * KI_FOWARD;
+
+    float adjSpeed = p + i;
+    motorRight = motorLeft + adjSpeed;
+
+    
+    MOTOR_SetSpeed(LEFT_WHEEL, 0.2);
+    MOTOR_SetSpeed(RIGHT_WHEEL, 0.2);
+
+  }
+  }
 
 float accelerationDecelerationPID(float pourcentageVitesse, uint8_t acceleration, uint8_t deceleration, float maxSpeed, float speed)
 {
@@ -368,7 +386,7 @@ int detectColor()
 {
     uint16_t clear, red, green, blue;
     char couleur[1];
-    delay(50);  // takes 50ms to read
+    delay(200);  // takes 50ms to read
     capteur.getRawData(&red, &green, &blue, &clear);
 
 
@@ -378,55 +396,55 @@ int detectColor()
     float xx=x/(x+y+z);
     float yy=y/(x+y+z);
 
-    if (xx>815 && xx<865 && yy>695 && yy<740)
+    if (xx>-7 && xx<0 && yy>-10 && yy<0)
     {
         couleur[0]='r';
         Serial.print(" \ncouleur\t "); Serial.print(couleur);
         return 1;
     }
-        else if (xx>815 && xx<865 && yy>695 && yy<740)
+        else if (xx>0.5 && xx<0.6 && yy>0.75 && yy<0.85)
     {
         couleur[0]='b';
         Serial.print(" \ncouleur\t "); Serial.print(couleur);
         return 2;
     }
-    else  if (xx>815 && xx<865 && yy>695 && yy<740)
+    else  if (xx>0.4 && xx<0.55 && yy>0.45 && yy<0.6)
     {
         couleur[0]='g';
         Serial.print(" \ncouleur\t "); Serial.print(couleur);
         return 3;
     }
+    else  if (xx>0.55 && xx<0.70 && yy>0.65 && yy<0.75)
+    {
+        couleur[0]='w';
+        Serial.print(" \ncouleur\t "); Serial.print(couleur);
+        return 3;
+    }
 
-    Serial.print("C:\t"); Serial.print(clear);
-    Serial.print("\tR:\t"); Serial.print(red);
-    Serial.print("\tG:\t"); Serial.print(green);
+    Serial.print("C:"); Serial.print(clear);
+    Serial.print("\tR:"); Serial.print(red);
+    Serial.print("\tG:"); Serial.print(green);
     Serial.print("\tB:"); Serial.print(blue);
     Serial.print("\t X:"); Serial.print(xx);
-    Serial.print("\tY:"); Serial.print(yy);
+    Serial.print("\tY:\n"); Serial.print(yy);
     return 0;
 }
 
-void servoMoteur(int angle)
-{
-  if (angle > angleMoteur)
-  {
-    for (int i = angleMoteur; i < angle; i += 1)
+void servoMoteur(int angle){
+    if (angle>angleMoteur)
     {
-      SERVO_SetAngle(0, i);
-      SERVO_SetAngle(1, i);
-      delay(15);
-    }
+        for (int i=angleMoteur;i<angle;i+=1){
+        SERVO_SetAngle(0,i);
+        delay(15);
   }
-  else
-  {
-    for (int i = angleMoteur; i > angle; i -= 1)
-    {
-      SERVO_SetAngle(0, i);
-      SERVO_SetAngle(1, i);
+}
+    else{
+      for (int i=angleMoteur;i>angle;i-=1){
+      SERVO_SetAngle(0,i);
       delay(15);
-    }
-  }
-  angleMoteur = angle;
+      }
+}
+  angleMoteur=angle;
 }
 
 void NRF24L01_Init()
@@ -448,23 +466,25 @@ void NRF24L01_TransmitData(char *data, uint8_t size)
   //Serial.println(data);
 
   radio.startListening();
+
+  delay(250);
 }
 
 bool turnCarousel()
 {
   NRF24L01_TransmitData(sendDataCarousel, sizeof(sendDataCarousel));
-
+  
   int cpt = 0;
   while (!radio.available()){ // attent le retour de commande carousel
     delay(1);
     cpt++;
     if(cpt >= 3000) //evite de rester dans le while  
       return 0;
-  } 
+  }
 
-  radio.read(&readDataCarousel, 1);
+  Serial.println("OUI");
+  radio.read(&readDataCarousel, sizeof(readDataCarousel));
   Serial.println(readDataCarousel);
-  radio.flush_rx();
 
   if (readDataCarousel[0] == '1')
     return 1;
@@ -479,17 +499,17 @@ MOTOR_SetSpeed(LEFT_WHEEL,0);
 MOTOR_SetSpeed(RIGHT_WHEEL,0);
 voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
 Serial.println(voltageValue);
-while (voltageValue>0&&voltageValue<4)
+while (voltageValue>0&&voltageValue<4.5)
     {
-        MOTOR_SetSpeed(LEFT_WHEEL,-0.3);
-        MOTOR_SetSpeed(RIGHT_WHEEL,-0.3);
+        MOTOR_SetSpeed(LEFT_WHEEL,-0.2);
+        MOTOR_SetSpeed(RIGHT_WHEEL,-0.2);
         voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
         Serial.println(voltageValue);
-        if (voltageValue>1.4&&voltageValue<1.5)
+        if (voltageValue>1.4&&voltageValue<1.7)
             {
             gauche();
             }
-        if (voltageValue>0.6&&voltageValue<0.8)
+        if (voltageValue>0.6&&voltageValue<1)
             {
             droite();
             }
@@ -498,39 +518,111 @@ while (voltageValue>0&&voltageValue<4)
     }
 MOTOR_SetSpeed(LEFT_WHEEL,0);
 MOTOR_SetSpeed(RIGHT_WHEEL,0);
-delay(5000);
 Serial.println("fin");
+delay(500);
 
 }
-
-
 
 void gauche(){
     Serial.println("gauche");
     for(voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);voltageValue<2.7 || voltageValue>2.9;)
     {
-    MOTOR_SetSpeed(LEFT_WHEEL,-0.3);
-    MOTOR_SetSpeed(RIGHT_WHEEL,-0.4);
+    MOTOR_SetSpeed(LEFT_WHEEL,-0.1);
+    MOTOR_SetSpeed(RIGHT_WHEEL,-0.15);
     voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
     Serial.println(voltageValue);
     }
     for(int i=0;i<1;i++){
-    MOTOR_SetSpeed(LEFT_WHEEL,-0.4);
-    MOTOR_SetSpeed(RIGHT_WHEEL,-0.3);
-    delay(50);
+    MOTOR_SetSpeed(LEFT_WHEEL,-0.15);
+    MOTOR_SetSpeed(RIGHT_WHEEL,-0.1);
+    delay(35);
     }
 }
 
 void droite(){
      Serial.println("droite");
     for(voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);voltageValue<2.7 ||voltageValue>2.9;){
-    MOTOR_SetSpeed(LEFT_WHEEL,-0.4);
-    MOTOR_SetSpeed(RIGHT_WHEEL,-0.3);
+    MOTOR_SetSpeed(LEFT_WHEEL,-0.15);
+    MOTOR_SetSpeed(RIGHT_WHEEL,-0.1);
     voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
     Serial.println(voltageValue);}
     for(int i=0;i<1;i++){
-    MOTOR_SetSpeed(LEFT_WHEEL,-0.3);
-    MOTOR_SetSpeed(RIGHT_WHEEL,-0.4);
-    delay(50);
+    MOTOR_SetSpeed(LEFT_WHEEL,-0.1);
+    MOTOR_SetSpeed(RIGHT_WHEEL,-0.15);
+    delay(35);
     }
+}
+
+int detecterCle(int retrait)
+{
+  servoMoteur(90);
+  Serial.println("dc");
+  float valeurBase = analogRead(PIN_ANALOG_CLE)* (5 / 1023.0);
+  Serial.println(valeurBase);
+  while (retrait==0)
+  {
+    delay(50);
+    float  ValeurActuel = analogRead(PIN_ANALOG_CLE)* (5 / 1023.0);
+    Serial.println(ValeurActuel);
+    if (ValeurActuel > valeurBase+0.02)
+    {
+      delay(1000);
+      return 1;
+    }
+  }
+    while (retrait==1)
+  {
+    delay(50);
+    float  ValeurActuel = analogRead(PIN_ANALOG_CLE)* (5 / 1023.0);
+    Serial.println(ValeurActuel);
+    if (ValeurActuel < valeurBase-0.02)
+    {
+      delay(1000);
+      return 1;
+    }
+  }
+  return 0;
+}
+
+void turnedRobot180(){
+  MOTOR_SetSpeed(LEFT_WHEEL,-0.2);
+  MOTOR_SetSpeed(RIGHT_WHEEL,0.2);
+  delay(1000);
+for(voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);voltageValue<2.7 ||voltageValue>2.9;){
+    MOTOR_SetSpeed(LEFT_WHEEL,-0.2);
+    MOTOR_SetSpeed(RIGHT_WHEEL,0.2);
+    voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
+    Serial.println(voltageValue);}
+    MOTOR_SetSpeed(LEFT_WHEEL,0);
+    MOTOR_SetSpeed(RIGHT_WHEEL,0);
+}
+
+void manipul(int fonction){
+    
+    if (fonction==1){
+    servoMoteur(90);
+    delay(1000);
+    movingReverseRobot(9.5); 
+    delay(50);
+    turnedRobot(-5);
+    delay(1000);
+    servoMoteur(70);
+    delay(1000);
+    turnedRobot(5);
+    delay(1000);
+    }
+     if (fonction==2){
+    servoMoteur(70);
+    delay(1000);
+    movingReverseRobot(9.5); 
+    delay(50);
+    turnedRobot(-5);
+    delay(1000);
+    servoMoteur(90);
+    delay(1000);
+    turnedRobot(5);
+    delay(1000);
+    }
+    movingFowardRobot(2);
+    servoMoteur(90);
 }
