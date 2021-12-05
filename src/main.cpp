@@ -17,6 +17,10 @@
 #include <SPI.h>
 #include <nRF24L01.h>
 #include <RF24.h>
+#include <Adafruit_GFX_Library/Adafruit_GFX.h>
+#include <Adafruit_SSD1306_Library/Adafruit_SSD1306.h>
+#include <unistd.h>
+#include <SoftwareSerial.h>
 
 #define RIGHT_WHEEL 1
 #define LEFT_WHEEL 0
@@ -35,6 +39,10 @@ Adafruit_TCS34725 capteur = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_700MS, TC
 #define ANALOG_LINE_FOLLOWER A0
 #define PIN_ANALOG_CLE A2
 // DIGITALS
+#define PIN_BOUTON_BLEU 35
+#define PIN_BOUTON_VERT 36
+#define COLLECT_NUMBER 3 //Fingerprint sampling times, can be set to 1-3
+#define IRQ 6            //IRQ pin
 
 // WHEEL
 #define ENCODER_STEP 3200
@@ -72,6 +80,51 @@ float motorRight = 0;
 
 // SERVOMOTOR
 int angleMoteur;
+
+//ALCOOTEST
+int analogPin = 1;
+int val = 0;
+
+DFRobot_ID809 fingerprint;
+Adafruit_SSD1306 display(-1);
+
+SoftwareSerial Serialt(53, 3); //RX, TX
+#define FPSerial Serialt
+
+//pour les messages
+char depot[] = "Deposer vos clefs sur le crochet.";
+char identification[] = " appuyer votre doitg sur le TouchID jusqu'a ce qu'il clignote jaune 3 fois, répété cette étape jusqu'a ce qu'il clignotte vert";
+char retrait[] = "Veuillez souffler sur le capteur pour recup vos clefs";
+char debut[] = "Bouton vert pour dépot clefs       Bouton bleu pour retrait clefs";
+char ID_retrait[] = "Appuyer le touch ID jusqu'a ce qu'il clignote bleu 3 fois";
+char test_echoue[] = "Test echoue, veuillez dégriser";
+char test_reussite[] = "Bravo, vous pouvez conduire";
+
+int xDebut, xID, xRetrait, xDepot, xID_R, xTest, xReussite;
+int minDepot;
+int minID;
+int minDebut;
+int minRetrait;
+int minID_R;
+int minTest;
+int minReussite;
+
+//compteur
+int i = 0;
+int y = 0;
+int z = 0;
+int r = 0;
+int p = 0;
+int w = 0;
+
+//gestion ID
+#define VERT 1
+#define ROUGE 2
+#define BLEU 3
+#define BLANC 4
+#define NBR_ID 80
+uint8_t tabID[NBR_ID][2]; // tableau, [ID], [couleur]
+uint8_t cptID;
 
 // NRF24L01
 RF24 radio(48, 49); // CE, CSN
@@ -115,9 +168,7 @@ _identification Identification;
 void executeStep();
 
 // timer function
-void timerInit(uint8_t id, void (*func)(), unsigned long delay, int32_t nrep);
-void timerDetectionLineFallower();
-volatile float voltageValue;
+float voltageValue;
 
 // motor function
 void stopMotor();
@@ -128,28 +179,105 @@ float accelerationDecelerationPID(float pourcentageVitesse, uint8_t acceleration
 void servoMoteur(int angle);
 int detectColor();
 
+int readAlcohol();
+void printAlcohol(int value);
+void fingerprintMatching();
+void fingerprintRegistration();
+void infoReussite();
+void infoEchec();
+void infoID_R();
+void infoID();
+void infoDepot();
+void infoRetrait();
+void infoDebut();
+
+/**
+ * @brief 
+ * 
+ */
 void setup()
 {
   BoardInit();
-
   NRF24L01_Init();
 
-  // timerInit(TIMER_LINE_FALLOWER, timerDetectionLineFallower, 2, -1);
+  //écran
+  display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+
+  display.setTextSize(3);
+  display.setTextColor(WHITE);
+  pinMode(PIN_BOUTON_BLEU, INPUT_PULLUP);
+  pinMode(PIN_BOUTON_VERT, INPUT_PULLUP);
+  display.setTextWrap(false);
+
+  //affichage
+  xDepot = display.width();
+  xID = display.width();
+  xDebut = display.width();
+  xRetrait = display.width();
+  minDepot = -12 * strlen(depot);
+  minID = -12 * strlen(identification);
+  minDebut = -12 * strlen(debut);
+  minRetrait = -12 * strlen(retrait);
+  minID_R = -12 * strlen(ID_retrait);
+  minTest = -12 * strlen(test_echoue);
+  minReussite = -12 * strlen(test_reussite);
+
+  //setup touch ID
+  cptID = 0;
+  for (int i = 0; i < NBR_ID; i++)
+  {
+
+    tabID[i][0] = 0;
+    tabID[i][1] = 0;
+  }
+  FPSerial.begin(115200);
+  /*Take FPSerial as communication serial of fingerprint module*/
+  fingerprint.begin(FPSerial);
+  /*Wait for Serial to open*/
+  while (!Serial)
+    ;
+  /*Test whether the device can properly communicate with mainboard
+    Return true or false
+    */
+  while (fingerprint.isConnected() == false)
+  {
+    Serial.println("Communication with device failed, please check connection");
+    /*Get error code information*/
+    //desc = fingerprint.getErrorDescription();
+    //Serial.println(desc);
+    delay(1000);
+  }
 
   readEncoder0 = 0;
   readEncoder1 = 0;
 
-  Step =GO_TO_CAROUSEL;// IDENTIFICATION;
-
-  // SOFT_TIMER_Enable(TIMER_LINE_FALLOWER); //active suiveur de ligne
+  Step = IDENTIFICATION;
 }
 
+/**
+ * @brief 
+ * 
+ */
 void loop()
 {
- //detectColor();
-  executeStep();
+
+  bool value = turnCarousel();
+  Serial.println(value);
+
+  if (value)
+    Serial.println("fonctionne!!!");
+  else
+    Serial.println("fonctionne pas...");
+
+  delay(1000);
+
+  // executeStep();
 }
 
+/**
+ * @brief 
+ * 
+ */
 void executeStep()
 {
 
@@ -198,25 +326,21 @@ void executeStep()
   }
 }
 
-void timerInit(uint8_t id, void (*func)(), unsigned long delay, int32_t nrep)
-{
-  SOFT_TIMER_SetCallback(id, func);
-  SOFT_TIMER_SetDelay(id, delay);
-  SOFT_TIMER_SetRepetition(id, nrep);
-}
-
-void timerDetectionLineFallower()
-{
-  voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
-  // Serial.println(voltageValue);
-}
-
+/**
+ * @brief 
+ * 
+ */
 void stopMotor()
 {
   MOTOR_SetSpeed(RIGHT_WHEEL, 0);
   MOTOR_SetSpeed(LEFT_WHEEL, 0);
 }
 
+/**
+ * @brief 
+ * 
+ * @param angle 
+ */
 void turnedRobot(int angle)
 {
   uint8_t angleTmp;
@@ -275,8 +399,15 @@ void turnedRobot(int angle)
   Serial.println(" ");*/
 }
 
-void movingFowardRobot(uint16_t distance){
-
+/**
+ * @brief 
+ * 
+ * @param distance 
+ */
+void movingFowardRobot(uint16_t distance)
+{
+  // uint16_t distance (CENTIMÈTRE);
+  // bool sens (0 = à l'envers. 1 = à l'endroit);
   distanceEncodeur = (distance / RESOLUTION_ENCODER);
   readEncoder0 = 0;
   readEncoder1 = 0;
@@ -348,6 +479,16 @@ void movingReverseRobot(uint16_t distance){
   }
   }
 
+/**
+ * @brief 
+ * 
+ * @param pourcentageVitesse 
+ * @param acceleration 
+ * @param deceleration 
+ * @param maxSpeed 
+ * @param speed 
+ * @return float 
+ */
 float accelerationDecelerationPID(float pourcentageVitesse, uint8_t acceleration, uint8_t deceleration, float maxSpeed, float speed)
 {
 
@@ -382,6 +523,11 @@ float accelerationDecelerationPID(float pourcentageVitesse, uint8_t acceleration
   }
 }
 
+/**
+ * @brief 
+ * 
+ * @return int 
+ */
 int detectColor()
 {
     uint16_t clear, red, green, blue;
@@ -447,6 +593,10 @@ void servoMoteur(int angle){
   angleMoteur=angle;
 }
 
+/**
+ * @brief 
+ * 
+ */
 void NRF24L01_Init()
 {
   radio.begin();
@@ -458,6 +608,12 @@ void NRF24L01_Init()
   radio.setPALevel(RF24_PA_MIN);
 }
 
+/**
+ * @brief 
+ * 
+ * @param data 
+ * @param size 
+ */
 void NRF24L01_TransmitData(char *data, uint8_t size)
 {
   radio.stopListening();
@@ -470,18 +626,24 @@ void NRF24L01_TransmitData(char *data, uint8_t size)
   delay(250);
 }
 
+/**
+ * @brief 
+ * 
+ * @return true 
+ * @return false 
+ */
 bool turnCarousel()
 {
   NRF24L01_TransmitData(sendDataCarousel, sizeof(sendDataCarousel));
   
   int cpt = 0;
-  while (!radio.available()){ // attent le retour de commande carousel
+  while (!radio.available())
+  { // attent le retour de commande carousel
     delay(1);
     cpt++;
-    if(cpt >= 3000) //evite de rester dans le while  
+    if (cpt >= 3000) //evite de rester dans le while
       return 0;
   }
-
   Serial.println("OUI");
   radio.read(&readDataCarousel, sizeof(readDataCarousel));
   Serial.println(readDataCarousel);
