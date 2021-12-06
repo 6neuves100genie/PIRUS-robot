@@ -34,7 +34,7 @@ void BoardInit(){
   __Robus__.init();
 
   // init telecommande
-  __irrecv__.enableIRIn(); // Start the receiver
+  //__irrecv__.enableIRIn(); // Start the receiver
 };
 
 void AudioInit(){
