@@ -40,9 +40,9 @@ Adafruit_TCS34725 capteur = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_700MS, TC
 #define PIN_ANALOG_CLE A2
 // DIGITALS
 #define PIN_BOUTON_BLEU 35
-#define PIN_BOUTON_VERT 36
+#define PIN_BOUTON_VERT 37
 #define COLLECT_NUMBER 3 //Fingerprint sampling times, can be set to 1-3
-#define IRQ 6            //IRQ pin
+#define IRQ 10           //IRQ pin
 
 // WHEEL
 #define ENCODER_STEP 3200
@@ -56,7 +56,7 @@ Adafruit_TCS34725 capteur = Adafruit_TCS34725(TCS34725_INTEGRATIONTIME_700MS, TC
 // FOWARD
 #define SPEED_MAX_HIGH_DISTANCE 0.6
 #define SPEED_MAX_LOW_DISTANCE 0.4
-#define SPEED_MIN 0.2
+#define SPEED_MIN 0.22
 #define ACCELERATION_HIGH_DISTANCE 20  // accelere jusqu'a 10% de la distance
 #define DECCELERATION_HIGH_DISTANCE 75 // deccelere a partir de 90% de la distance
 #define ACCELERATION_LOW_DISTANCE 20   // accelere jusqu'a 10% de la distance
@@ -84,16 +84,17 @@ int angleMoteur;
 //ALCOOTEST
 int analogPin = 1;
 int val = 0;
+#define VAL_LIMITE 300
 
 DFRobot_ID809 fingerprint;
 Adafruit_SSD1306 display(-1);
 
-SoftwareSerial Serialt(53, 3); //RX, TX
+SoftwareSerial Serialt(67, 53); //RX, TX
 #define FPSerial Serialt
 
 //pour les messages
 char depot[] = "Deposer vos clefs sur le crochet.";
-char identification[] = " appuyer votre doitg sur le TouchID jusqu'a ce qu'il clignote jaune 3 fois, répété cette étape jusqu'a ce qu'il clignotte vert";
+char identification[] = " appuyer votre doitg sur le TouchID jusqu'a ce qu'il clignote jaune 3 fois, repete cette etape jusqu'a ce qu'il clignotte vert";
 char retrait[] = "Veuillez souffler sur le capteur pour recup vos clefs";
 char debut[] = "Bouton vert pour dépot clefs       Bouton bleu pour retrait clefs";
 char ID_retrait[] = "Appuyer le touch ID jusqu'a ce qu'il clignote bleu 3 fois";
@@ -115,7 +116,7 @@ int y = 0;
 int z = 0;
 int r = 0;
 int p = 0;
-int w = 0;
+int scanDoigt = 0;
 
 //gestion ID
 #define VERT 1
@@ -125,6 +126,7 @@ int w = 0;
 #define NBR_ID 80
 uint8_t tabID[NBR_ID][2]; // tableau, [ID], [couleur]
 uint8_t cptID;
+uint8_t numID; //pour le retrait
 
 // NRF24L01
 RF24 radio(48, 49); // CE, CSN
@@ -155,6 +157,14 @@ typedef enum _step
 } _step;
 _step Step;
 
+typedef enum _etatClient
+{
+  DEPOT,
+  RETRAIT,
+  SAOUL,
+} _etatClient;
+_etatClient EtatClient;
+
 // definition fonction
 void executeStep();
 
@@ -181,6 +191,8 @@ void infoID();
 void infoDepot();
 void infoRetrait();
 void infoDebut();
+void infoScanEnCours();
+void delFinger();
 
 /**
  * @brief 
@@ -188,8 +200,8 @@ void infoDebut();
  */
 void setup()
 {
-  //BoardInit();
-  Serial.begin(9600);
+  BoardInit();
+  //Serial.begin(9600);
   NRF24L01_Init();
 
   Serial.println("test");
@@ -229,28 +241,30 @@ void setup()
   /*Take FPSerial as communication serial of fingerprint module*/
   fingerprint.begin(FPSerial);
   /*Wait for Serial to open*/
-  while (!Serial);
+  while (!Serial)
+    ;
   /*Test whether the device can properly communicate with mainboard
     Return true or false
     */
 
   Serial.println("test");
 
-  /*while (fingerprint.isConnected() == false)
+  while (fingerprint.isConnected() == false)
   {
     Serial.println("Communication with device failed, please check connection");
     //Get error code information
     //desc = fingerprint.getErrorDescription();
     Serial.println(fingerprint.getErrorDescription());
     delay(1000);
-  }*/
+  }
+  delFinger();
 
   Serial.println("test");
 
   readEncoder0 = 0;
   readEncoder1 = 0;
 
-  Step = IDENTIFICATION;
+  Step = FIND_GOOD_KEY;
 }
 
 /**
@@ -271,38 +285,27 @@ void executeStep()
 
   switch (Step)
   {
-  case IDENTIFICATION:
+  case 0:
     display.clearDisplay();
 
-    int d =digitalRead(PIN_BOUTON_VERT);
-    int c = digitalRead(PIN_BOUTON_BLEU);
-
-    if (!digitalRead(PIN_BOUTON_BLEU) && digitalRead(PIN_BOUTON_VERT))
+    if (!digitalRead(PIN_BOUTON_BLEU) && digitalRead(PIN_BOUTON_VERT)) //retrait
     {
-      Serial.println("BLEU");
-      while (/*detecterCle(0) == 0*/1)/******************************************************************************************/
+      Serial.println("RETRAIT");
+
+      while (!scanDoigt)
       {
-
-        while (i <= 120)
+        if (digitalRead(IRQ))
         {
-          infoID();
-          delay(50);
-          Serial.println(i);
-          i++;
-        }
+          infoScanEnCours();
 
-        while (y <= 1)
-        {
-          if (digitalRead(IRQ))
-          {
-            uint16_t i = 0;
-            /*Capture fingerprint image, 5s idle timeout, if timeout=0,Disable  the collection timeout function
+          uint16_t i = 0;
+          /*Capture fingerprint image, 5s idle timeout, if timeout=0,Disable  the collection timeout function
             Return 0 if succeed, otherwise return ERR_ID809
             */
-            if ((fingerprint.collectionFingerprint(/*timeout=*/5)) != ERR_ID809)
-            {
-              /*Get the time finger pressed down*/
-              /*Set fingerprint LED ring mode, color, and number of blinks 
+          if ((fingerprint.collectionFingerprint(/*timeout=*/5)) != ERR_ID809)
+          {
+            /*Get the time finger pressed down*/
+            /*Set fingerprint LED ring mode, color, and number of blinks 
               Can be set as follows:
               Parameter 1:<LEDMode>
               eBreathing   eFastBlink   eKeepsOn    eNormalClose
@@ -313,228 +316,197 @@ void executeStep()
               Parameter 3:<number of blinks> 0 represents blinking all the time
               This parameter will only be valid in mode eBreathing, eFastBlink, eSlowBlink
               */
-              fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDBlue, /*blinkCount = */ 3); //blue LED blinks quickly 3 times, means it's in fingerprint comparison mode now
-              /*Wait for finger to relase */
-              while (fingerprint.detectFinger())
-              {
-                delay(50);
-                i++;
-                if (i == 15)
-                { //Yellow LED blinks quickly 3 times, means it's in fingerprint regisrtation mode now
-                  /*Set fingerprint LED ring to always ON in yellow*/
-                  fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDYellow, /*blinkCount = */ 3);
-                }
-                else if (i == 30)
-                { //Red LED blinks quickly 3 times, means it's in fingerprint deletion mode now
-                  /*Set fingerprint LED ring to always ON in red*/
-                  fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDRed, /*blinkCount = */ 3);
-                }
+            fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDBlue, /*blinkCount = */ 3); //blue LED blinks quickly 3 times, means it's in fingerprint comparison mode now
+            /*Wait for finger to relase */
+            while (fingerprint.detectFinger())
+            {
+              delay(50);
+              i++;
+              if (i == 15)
+              { //Yellow LED blinks quickly 3 times, means it's in fingerprint regisrtation mode now
+                /*Set fingerprint LED ring to always ON in yellow*/
+                fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDYellow, /*blinkCount = */ 3);
+              }
+              else if (i == 30)
+              { //Red LED blinks quickly 3 times, means it's in fingerprint deletion mode now
+                /*Set fingerprint LED ring to always ON in red*/
+                fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDRed, /*blinkCount = */ 3);
               }
             }
-            if (i == 0)
-            {
-              /*Fingerprint capturing failed*/
-            }
-            else if (i > 0 && i < 15)
-            {
-              Serial.println("Enter fingerprint comparison mode");
-              /*Compare fingerprints*/
-              /*//fingerprintMatching();*/
-            }
-            else if (i >= 15 && i < 30)
-            {
-              Serial.println("Enter fingerprint registration mode");
-              /*Registrate fingerprint*/
-              fingerprintRegistration();
-              Serial.println(tabID[cptID - 1][0]);
-            }
-            else
-            {
-              Serial.println("Enter fingerprint deletion mode");
-              /*Delete this fingerprint*/
-              /*fingerprintDeletion();*/
-            }
           }
-
-          delay(10000);
-          y++;
+          if (i == 0)
+          {
+            /*Fingerprint capturing failed*/
+          }
+          else if (i > 0 && i < 15)
+          {
+            Serial.println("Enter fingerprint comparison mode");
+            /*Compare fingerprints*/
+            fingerprintMatching();
+          }
         }
-
-        while (z <= 200)
-        {
-          infoDepot();
-          delay(50);
-          Serial.println(z);
-          z++;
-        }
-      }
-
-      delay(150);
-      turnedRobot180();
-      suiveur_ligne();
-      uint8_t b = detectColor();
-      while (b == !tabID[cptID])
-      {
-        turnCarousel();
-      }
-
-      turnedRobot(180);
-      manipul(1);
-      suiveur_ligne();
-    }
-
-    else if (!digitalRead(PIN_BOUTON_VERT) && digitalRead(PIN_BOUTON_BLEU))
-    {
-      Serial.println("VERT");
-      while (c != 0)
-      {
-        while (r < 70)
+        else
         {
           infoID_R();
           delay(50);
-          Serial.println(r);
-          r++;
         }
+      }
+      scanDoigt = 0;
+      Serial.println("************************************************************************************");
 
-        while (w <= 1)
-        {
-          if (digitalRead(IRQ))
-          {
-            uint16_t i = 0;
-            /*Capture fingerprint image, 5s idle timeout, if timeout=0,Disable  the collection timeout function
-      Return 0 if succeed, otherwise return ERR_ID809
-     */
-            if ((fingerprint.collectionFingerprint(/*timeout=*/5)) != ERR_ID809)
-            {
-              /*Get the time finger pressed down*/
-              /*Set fingerprint LED ring mode, color, and number of blinks 
-        Can be set as follows:
-        Parameter 1:<LEDMode>
-        eBreathing   eFastBlink   eKeepsOn    eNormalClose
-        eFadeIn      eFadeOut     eSlowBlink   
-        Paramerer 2:<LEDColor>
-        eLEDGreen  eLEDRed      eLEDYellow   eLEDBlue
-        eLEDCyan   eLEDMagenta  eLEDWhite
-        Parameter 3:<number of blinks> 0 represents blinking all the time
-        This parameter will only be valid in mode eBreathing, eFastBlink, eSlowBlink
-       */
-              fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDBlue, /*blinkCount = */ 3); //blue LED blinks quickly 3 times, means it's in fingerprint comparison mode now
-              /*Wait for finger to relase */
-              while (fingerprint.detectFinger())
-              {
-                delay(50);
-                i++;
-                if (i == 15)
-                { //Yellow LED blinks quickly 3 times, means it's in fingerprint regisrtation mode now
-                  /*Set fingerprint LED ring to always ON in yellow*/
-                  fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDYellow, /*blinkCount = */ 3);
-                }
-                else if (i == 30)
-                { //Red LED blinks quickly 3 times, means it's in fingerprint deletion mode now
-                  /*Set fingerprint LED ring to always ON in red*/
-                  fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDRed, /*blinkCount = */ 3);
-                }
-              }
-            }
-            if (i == 0)
-            {
-              /*Fingerprint capturing failed*/
-            }
-            else if (i > 0 && i < 15)
-            {
-              Serial.println("Enter fingerprint comparison mode");
-              /*Compare fingerprints*/
-              fingerprintMatching();
-              /*//fingerprintMatching();*/
-            }
-            else if (i >= 15 && i < 30)
-            {
-              Serial.println("Enter fingerprint registration mode");
-              /*Registrate fingerprint*/
+      while (p <= 100)
+      {
+        display.clearDisplay();
 
-              Serial.println(tabID[cptID - 1][0]);
-            }
-            else
-            {
-              Serial.println("Enter fingerprint deletion mode");
-              /*Delete this fingerprint*/
-              /*fingerprintDeletion();*/
-            }
-          }
-          delay(5000);
-          w++;
-        }
+        val = readAlcohol();
+        printAlcohol(val);
+        delay(50);
+        Serial.println(val);
+        p++;
+      }
 
-        while (p <= 150)
-        {
-          display.clearDisplay();
-
-          val = readAlcohol();
-          printAlcohol(val);
-          delay(50);
-          Serial.println(val);
-          p++;
-        }
-        int cpt_t = 0;
-
-        while (cpt_t < 150)
-        {
-          if (val < 250)
-          {
-            infoReussite();
-          }
-          else
-          {
-            infoEchec();
-          }
-          delay(50);
-          cpt_t++;
-          Serial.println(cpt_t);
-        }
-        c = digitalRead(PIN_BOUTON_BLEU);
+      if (VAL_LIMITE <= val)
+      { //saoul
+        infoEchec();
+        EtatClient = SAOUL;
+        Serial.println("/*****SAOUL***********/");
+      }
+      else
+      { //pas saoul
+        infoReussite();
+        EtatClient = RETRAIT;
+        Step = GO_TO_CAROUSEL;
+        Serial.println("/*****PAS SAOUL***********/");
       }
     }
+    else if (!digitalRead(PIN_BOUTON_VERT) && digitalRead(PIN_BOUTON_BLEU)) // depot clée
+    {
+      Serial.println("depot clee");
 
+      while (!scanDoigt)
+      {
+        if (digitalRead(IRQ))
+        {
+          infoScanEnCours();
+
+          uint16_t i = 0;
+          /*Capture fingerprint image, 5s idle timeout, if timeout=0,Disable  the collection timeout function
+            Return 0 if succeed, otherwise return ERR_ID809
+            */
+          if ((fingerprint.collectionFingerprint(/*timeout=*/5)) != ERR_ID809)
+          {
+            /*Get the time finger pressed down*/
+            /*Set fingerprint LED ring mode, color, and number of blinks 
+              Can be set as follows:
+              Parameter 1:<LEDMode>
+              eBreathing   eFastBlink   eKeepsOn    eNormalClose
+              eFadeIn      eFadeOut     eSlowBlink   
+              Paramerer 2:<LEDColor>
+              eLEDGreen  eLEDRed      eLEDYellow   eLEDBlue
+              eLEDCyan   eLEDMagenta  eLEDWhite
+              Parameter 3:<number of blinks> 0 represents blinking all the time
+              This parameter will only be valid in mode eBreathing, eFastBlink, eSlowBlink
+              */
+            fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDBlue, /*blinkCount = */ 3); //blue LED blinks quickly 3 times, means it's in fingerprint comparison mode now
+            /*Wait for finger to relase */
+            while (fingerprint.detectFinger())
+            {
+              delay(50);
+              i++;
+              if (i == 15)
+              { //Yellow LED blinks quickly 3 times, means it's in fingerprint regisrtation mode now
+                /*Set fingerprint LED ring to always ON in yellow*/
+                fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDYellow, /*blinkCount = */ 3);
+              }
+              else if (i == 30)
+              { //Red LED blinks quickly 3 times, means it's in fingerprint deletion mode now
+                /*Set fingerprint LED ring to always ON in red*/
+                fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDRed, /*blinkCount = */ 3);
+              }
+            }
+          }
+          if (i == 0)
+          {
+            /*Fingerprint capturing failed*/
+          }
+          else if (i >= 15 && i < 30)
+          {
+            Serial.println("Enter fingerprint registration mode");
+            /*Registrate fingerprint*/
+            fingerprintRegistration();
+            Serial.println(tabID[cptID - 1][0]);
+            scanDoigt = 1;
+          }
+        }
+        else
+        {
+          infoID();
+          delay(50);
+        }
+      }
+      scanDoigt = 0;
+      detecterCle(0);
+      EtatClient = DEPOT;
+      Step = GO_TO_CAROUSEL;
+      Serial.println(Step);
+    }
     else
       infoDebut();
-
-    //Serial.println("Cliquer sur un bouton");
-    //Step = GO_TO_CAROUSEL;
     break;
 
-  case GO_TO_CAROUSEL:
-    //suiveur_ligne();
-    /* delay(2000);
-    bool val = turnCarousel();
-    Serial.println(val);*/
-    //Step = FIND_GOOD_KEY;
-    detectColor();
+  case 1:
+    Serial.println("************************************************************************************");
+    suiveur_ligne();
+    Step = FIND_GOOD_KEY;
+    Serial.println("************************************************************************************");
     break;
 
-  case FIND_GOOD_KEY:
+  case 2:
 
-    // Step = TAKE_KEY;
-    // Step = DROP_KEY;
-    // Step = DRUNK_KEY;
+    Serial.println("************************************************************************************");
+    //int Couleur_actuel = detectColor();
+    
+    if (EtatClient == RETRAIT)
+    {
+      turnCarousel();
+      Step = TAKE_KEY;
+    }
+    if (EtatClient == DEPOT)
+    {
+      Step = DROP_KEY;
+    }
     break;
 
-  case TAKE_KEY:
+  case 3:
+    turnedRobot180();
+    delay(50);
+    turnedRobot180();
+    delay(50);
+    manipul(1);
+    Step = GO_BACK;
+    break;
+
+  case 4:
+    Serial.println("************************************************************************************");
+    turnedRobot180();
+    delay(50);
+    turnedRobot180();
+    delay(50);
+    manipul(2);
+    Step = GO_BACK;
+    break;
+
+  case 5:
 
     Step = GO_BACK;
     break;
 
-  case DROP_KEY:
-
-    Step = GO_BACK;
-    break;
-
-  case DRUNK_KEY:
-
-    Step = GO_BACK;
-    break;
-
-  case GO_BACK:
-
+  case 6:
+    suiveur_ligne();
+    delay(50);
+    turnedRobot180();
+    delay(50);
+    turnedRobot180();
     Step = IDENTIFICATION;
     break;
   }
@@ -653,7 +625,6 @@ void movingFowardRobot(uint16_t distance)
     MOTOR_SetSpeed(RIGHT_WHEEL, -0.2);
   }
 }
-
 
 void movingReverseRobot(uint16_t distance)
 {
@@ -886,7 +857,6 @@ bool turnCarousel()
 
 void suiveur_ligne()
 {
-
   Serial.println(voltageValue);
   MOTOR_SetSpeed(LEFT_WHEEL, 0);
   MOTOR_SetSpeed(RIGHT_WHEEL, 0);
@@ -951,9 +921,15 @@ void droite()
   }
 }
 
+/**
+ * @brief 
+ * 
+ * @param retrait 1=retrait 0=depot
+ * @return int 
+ */
 int detecterCle(int retrait)
 {
-  servoMoteur(90);
+  //servoMoteur(90);
   Serial.println("dc");
   float valeurBase = analogRead(PIN_ANALOG_CLE) * (5 / 1023.0);
   Serial.println(valeurBase);
@@ -965,6 +941,7 @@ int detecterCle(int retrait)
     if (ValeurActuel > valeurBase + 0.02)
     {
       delay(1000);
+      //retrait == 2;
       return 1;
     }
   }
@@ -1086,7 +1063,7 @@ void infoID()
   display.setCursor(xID, 15);
   display.print(identification);
   display.display();
-  xID = xID - 4;
+  xID = xID - 8;
   if (xID < minID)
     xID = display.width();
 }
@@ -1096,7 +1073,7 @@ void infoID_R()
   display.clearDisplay();
   display.setCursor(0, 7);
   display.setTextSize(1);
-  display.print("BITE");
+  display.print("ID");
   display.setTextSize(2);
   display.setCursor(xID_R, 15);
   display.print(ID_retrait);
@@ -1134,6 +1111,15 @@ void infoReussite()
   xReussite = xReussite - 7;
   if (xReussite < minReussite)
     xReussite = display.width();
+}
+
+void infoScanEnCours()
+{
+  display.clearDisplay();
+  display.setCursor(20, 10);
+  display.setTextSize(2);
+  display.print("SCAN ID");
+  display.display();
 }
 
 void fingerprintRegistration()
@@ -1231,6 +1217,8 @@ void fingerprintMatching()
     fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eKeepsOn, /*LEDColor = */ fingerprint.eLEDGreen, /*blinkCount = */ 0);
     Serial.print("Successfully matched,ID=");
     Serial.println(ret);
+    numID = ret;
+    scanDoigt = 1;
   }
   else
   {
@@ -1305,4 +1293,28 @@ int readAlcohol()
 
   val = (val1 + val2 + val3 + val4 + val5 + val6 + val7 + val8 + val9 + val10 + val11 + val12 + val13 + val14 + val15) / 15;
   return val;
+}
+
+void delFinger()
+{
+
+  fingerprint.delFingerprint(1);
+  fingerprint.delFingerprint(2);
+  fingerprint.delFingerprint(3);
+  fingerprint.delFingerprint(5);
+  fingerprint.delFingerprint(6);
+  fingerprint.delFingerprint(7);
+  fingerprint.delFingerprint(8);
+  fingerprint.delFingerprint(9);
+  fingerprint.delFingerprint(10);
+  fingerprint.delFingerprint(11);
+  fingerprint.delFingerprint(12);
+  fingerprint.delFingerprint(13);
+  fingerprint.delFingerprint(14);
+  fingerprint.delFingerprint(15);
+  fingerprint.delFingerprint(16);
+  fingerprint.delFingerprint(17);
+  fingerprint.delFingerprint(18);
+  fingerprint.delFingerprint(19);
+  fingerprint.delFingerprint(20);
 }
