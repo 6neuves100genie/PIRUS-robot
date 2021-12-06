@@ -97,7 +97,7 @@ char identification[] = " appuyer votre doitg sur le TouchID jusqu'a ce qu'il cl
 char retrait[] = "Veuillez souffler sur le capteur pour recup vos clefs";
 char debut[] = "Bouton vert pour dépot clefs       Bouton bleu pour retrait clefs";
 char ID_retrait[] = "Appuyer le touch ID jusqu'a ce qu'il clignote bleu 3 fois";
-char test_echoue[] = "Test echoue, veuillez dégriser";
+char test_echoue[] = "Test echoue, veuillez degriser";
 char test_reussite[] = "Bravo, vous pouvez conduire";
 
 int xDebut, xID, xRetrait, xDepot, xID_R, xTest, xReussite;
@@ -138,9 +138,10 @@ bool turnCarousel();
 void suiveur_ligne();
 void gauche();
 void droite();
-int detecterCle(int retrait);     //0=depot   1=retrait
+int detecterCle(int retrait); //0=depot   1=retrait
 void turnedRobot180();
 void manipul(int fonction);
+
 // step to follow
 typedef enum _step
 {
@@ -153,16 +154,6 @@ typedef enum _step
   GO_BACK
 } _step;
 _step Step;
-
-// HID
-typedef enum _identification
-{
-  MENU,
-  DEPOT,
-  RETRAIT,
-  DEPOT_CLEF,
-} _identification;
-_identification Identification;
 
 // definition fonction
 void executeStep();
@@ -197,8 +188,11 @@ void infoDebut();
  */
 void setup()
 {
-  BoardInit();
+  //BoardInit();
+  Serial.begin(9600);
   NRF24L01_Init();
+
+  Serial.println("test");
 
   //écran
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
@@ -208,6 +202,8 @@ void setup()
   pinMode(PIN_BOUTON_BLEU, INPUT_PULLUP);
   pinMode(PIN_BOUTON_VERT, INPUT_PULLUP);
   display.setTextWrap(false);
+
+  Serial.println("test");
 
   //affichage
   xDepot = display.width();
@@ -226,7 +222,6 @@ void setup()
   cptID = 0;
   for (int i = 0; i < NBR_ID; i++)
   {
-
     tabID[i][0] = 0;
     tabID[i][1] = 0;
   }
@@ -234,19 +229,23 @@ void setup()
   /*Take FPSerial as communication serial of fingerprint module*/
   fingerprint.begin(FPSerial);
   /*Wait for Serial to open*/
-  while (!Serial)
-    ;
+  while (!Serial);
   /*Test whether the device can properly communicate with mainboard
     Return true or false
     */
-  while (fingerprint.isConnected() == false)
+
+  Serial.println("test");
+
+  /*while (fingerprint.isConnected() == false)
   {
     Serial.println("Communication with device failed, please check connection");
-    /*Get error code information*/
+    //Get error code information
     //desc = fingerprint.getErrorDescription();
-    //Serial.println(desc);
+    Serial.println(fingerprint.getErrorDescription());
     delay(1000);
-  }
+  }*/
+
+  Serial.println("test");
 
   readEncoder0 = 0;
   readEncoder1 = 0;
@@ -260,18 +259,7 @@ void setup()
  */
 void loop()
 {
-
-  bool value = turnCarousel();
-  Serial.println(value);
-
-  if (value)
-    Serial.println("fonctionne!!!");
-  else
-    Serial.println("fonctionne pas...");
-
-  delay(1000);
-
-  // executeStep();
+  executeStep();
 }
 
 /**
@@ -284,13 +272,239 @@ void executeStep()
   switch (Step)
   {
   case IDENTIFICATION:
-    
-    Step = GO_TO_CAROUSEL;
+    display.clearDisplay();
+
+    int d =digitalRead(PIN_BOUTON_VERT);
+    int c = digitalRead(PIN_BOUTON_BLEU);
+
+    if (!digitalRead(PIN_BOUTON_BLEU) && digitalRead(PIN_BOUTON_VERT))
+    {
+      Serial.println("BLEU");
+      while (/*detecterCle(0) == 0*/1)/******************************************************************************************/
+      {
+
+        while (i <= 120)
+        {
+          infoID();
+          delay(50);
+          Serial.println(i);
+          i++;
+        }
+
+        while (y <= 1)
+        {
+          if (digitalRead(IRQ))
+          {
+            uint16_t i = 0;
+            /*Capture fingerprint image, 5s idle timeout, if timeout=0,Disable  the collection timeout function
+            Return 0 if succeed, otherwise return ERR_ID809
+            */
+            if ((fingerprint.collectionFingerprint(/*timeout=*/5)) != ERR_ID809)
+            {
+              /*Get the time finger pressed down*/
+              /*Set fingerprint LED ring mode, color, and number of blinks 
+              Can be set as follows:
+              Parameter 1:<LEDMode>
+              eBreathing   eFastBlink   eKeepsOn    eNormalClose
+              eFadeIn      eFadeOut     eSlowBlink   
+              Paramerer 2:<LEDColor>
+              eLEDGreen  eLEDRed      eLEDYellow   eLEDBlue
+              eLEDCyan   eLEDMagenta  eLEDWhite
+              Parameter 3:<number of blinks> 0 represents blinking all the time
+              This parameter will only be valid in mode eBreathing, eFastBlink, eSlowBlink
+              */
+              fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDBlue, /*blinkCount = */ 3); //blue LED blinks quickly 3 times, means it's in fingerprint comparison mode now
+              /*Wait for finger to relase */
+              while (fingerprint.detectFinger())
+              {
+                delay(50);
+                i++;
+                if (i == 15)
+                { //Yellow LED blinks quickly 3 times, means it's in fingerprint regisrtation mode now
+                  /*Set fingerprint LED ring to always ON in yellow*/
+                  fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDYellow, /*blinkCount = */ 3);
+                }
+                else if (i == 30)
+                { //Red LED blinks quickly 3 times, means it's in fingerprint deletion mode now
+                  /*Set fingerprint LED ring to always ON in red*/
+                  fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDRed, /*blinkCount = */ 3);
+                }
+              }
+            }
+            if (i == 0)
+            {
+              /*Fingerprint capturing failed*/
+            }
+            else if (i > 0 && i < 15)
+            {
+              Serial.println("Enter fingerprint comparison mode");
+              /*Compare fingerprints*/
+              /*//fingerprintMatching();*/
+            }
+            else if (i >= 15 && i < 30)
+            {
+              Serial.println("Enter fingerprint registration mode");
+              /*Registrate fingerprint*/
+              fingerprintRegistration();
+              Serial.println(tabID[cptID - 1][0]);
+            }
+            else
+            {
+              Serial.println("Enter fingerprint deletion mode");
+              /*Delete this fingerprint*/
+              /*fingerprintDeletion();*/
+            }
+          }
+
+          delay(10000);
+          y++;
+        }
+
+        while (z <= 200)
+        {
+          infoDepot();
+          delay(50);
+          Serial.println(z);
+          z++;
+        }
+      }
+
+      delay(150);
+      turnedRobot180();
+      suiveur_ligne();
+      uint8_t b = detectColor();
+      while (b == !tabID[cptID])
+      {
+        turnCarousel();
+      }
+
+      turnedRobot(180);
+      manipul(1);
+      suiveur_ligne();
+    }
+
+    else if (!digitalRead(PIN_BOUTON_VERT) && digitalRead(PIN_BOUTON_BLEU))
+    {
+      Serial.println("VERT");
+      while (c != 0)
+      {
+        while (r < 70)
+        {
+          infoID_R();
+          delay(50);
+          Serial.println(r);
+          r++;
+        }
+
+        while (w <= 1)
+        {
+          if (digitalRead(IRQ))
+          {
+            uint16_t i = 0;
+            /*Capture fingerprint image, 5s idle timeout, if timeout=0,Disable  the collection timeout function
+      Return 0 if succeed, otherwise return ERR_ID809
+     */
+            if ((fingerprint.collectionFingerprint(/*timeout=*/5)) != ERR_ID809)
+            {
+              /*Get the time finger pressed down*/
+              /*Set fingerprint LED ring mode, color, and number of blinks 
+        Can be set as follows:
+        Parameter 1:<LEDMode>
+        eBreathing   eFastBlink   eKeepsOn    eNormalClose
+        eFadeIn      eFadeOut     eSlowBlink   
+        Paramerer 2:<LEDColor>
+        eLEDGreen  eLEDRed      eLEDYellow   eLEDBlue
+        eLEDCyan   eLEDMagenta  eLEDWhite
+        Parameter 3:<number of blinks> 0 represents blinking all the time
+        This parameter will only be valid in mode eBreathing, eFastBlink, eSlowBlink
+       */
+              fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDBlue, /*blinkCount = */ 3); //blue LED blinks quickly 3 times, means it's in fingerprint comparison mode now
+              /*Wait for finger to relase */
+              while (fingerprint.detectFinger())
+              {
+                delay(50);
+                i++;
+                if (i == 15)
+                { //Yellow LED blinks quickly 3 times, means it's in fingerprint regisrtation mode now
+                  /*Set fingerprint LED ring to always ON in yellow*/
+                  fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDYellow, /*blinkCount = */ 3);
+                }
+                else if (i == 30)
+                { //Red LED blinks quickly 3 times, means it's in fingerprint deletion mode now
+                  /*Set fingerprint LED ring to always ON in red*/
+                  fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDRed, /*blinkCount = */ 3);
+                }
+              }
+            }
+            if (i == 0)
+            {
+              /*Fingerprint capturing failed*/
+            }
+            else if (i > 0 && i < 15)
+            {
+              Serial.println("Enter fingerprint comparison mode");
+              /*Compare fingerprints*/
+              fingerprintMatching();
+              /*//fingerprintMatching();*/
+            }
+            else if (i >= 15 && i < 30)
+            {
+              Serial.println("Enter fingerprint registration mode");
+              /*Registrate fingerprint*/
+
+              Serial.println(tabID[cptID - 1][0]);
+            }
+            else
+            {
+              Serial.println("Enter fingerprint deletion mode");
+              /*Delete this fingerprint*/
+              /*fingerprintDeletion();*/
+            }
+          }
+          delay(5000);
+          w++;
+        }
+
+        while (p <= 150)
+        {
+          display.clearDisplay();
+
+          val = readAlcohol();
+          printAlcohol(val);
+          delay(50);
+          Serial.println(val);
+          p++;
+        }
+        int cpt_t = 0;
+
+        while (cpt_t < 150)
+        {
+          if (val < 250)
+          {
+            infoReussite();
+          }
+          else
+          {
+            infoEchec();
+          }
+          delay(50);
+          cpt_t++;
+          Serial.println(cpt_t);
+        }
+        c = digitalRead(PIN_BOUTON_BLEU);
+      }
+    }
+
+    else
+      infoDebut();
+
+    //Serial.println("Cliquer sur un bouton");
+    //Step = GO_TO_CAROUSEL;
     break;
 
   case GO_TO_CAROUSEL:
     //suiveur_ligne();
-   /* delay(2000);
+    /* delay(2000);
     bool val = turnCarousel();
     Serial.println(val);*/
     //Step = FIND_GOOD_KEY;
@@ -415,16 +629,16 @@ void movingFowardRobot(uint16_t distance)
   motorRight = 0;
   sumError = 0;
 
-  ENCODER_Reset(RIGHT_WHEEL); 
+  ENCODER_Reset(RIGHT_WHEEL);
   ENCODER_Reset(LEFT_WHEEL);
 
+  while (((distanceEncodeur) > readEncoder0) && ((distanceEncodeur) > readEncoder1))
+  {
 
-  while(((distanceEncodeur ) > readEncoder0) && ((distanceEncodeur) > readEncoder1)){
+    readEncoder0 = ENCODER_Read(LEFT_WHEEL) * -1;
+    readEncoder1 = ENCODER_Read(RIGHT_WHEEL) * -1;
 
-    readEncoder0 = ENCODER_Read(LEFT_WHEEL)*-1;  
-    readEncoder1 = ENCODER_Read(RIGHT_WHEEL)*-1;
-
-    //float pourcentageVitesse = float(readEncoder0/distanceEncodeur) * 100; 
+    //float pourcentageVitesse = float(readEncoder0/distanceEncodeur) * 100;
     //PID FOR ENCODER
     float error = readEncoder0 - readEncoder1;
     float p = error * KP_FOWARD;
@@ -435,14 +649,14 @@ void movingFowardRobot(uint16_t distance)
     float adjSpeed = p + i;
     motorRight = motorLeft + adjSpeed;
 
-    
     MOTOR_SetSpeed(LEFT_WHEEL, -0.2);
     MOTOR_SetSpeed(RIGHT_WHEEL, -0.2);
-
   }
 }
 
-void movingReverseRobot(uint16_t distance){
+
+void movingReverseRobot(uint16_t distance)
+{
   // uint16_t distance (CENTIMÈTRE);
   // bool sens (0 = à l'envers. 1 = à l'endroit);
   distanceEncodeur = (distance / RESOLUTION_ENCODER);
@@ -452,16 +666,16 @@ void movingReverseRobot(uint16_t distance){
   motorRight = 0;
   sumError = 0;
 
-  ENCODER_Reset(RIGHT_WHEEL); 
+  ENCODER_Reset(RIGHT_WHEEL);
   ENCODER_Reset(LEFT_WHEEL);
 
+  while (((distanceEncodeur) > readEncoder0) && ((distanceEncodeur) > readEncoder1))
+  {
 
-  while(((distanceEncodeur ) > readEncoder0) && ((distanceEncodeur) > readEncoder1)){
-
-    readEncoder0 = ENCODER_Read(LEFT_WHEEL);  
+    readEncoder0 = ENCODER_Read(LEFT_WHEEL);
     readEncoder1 = ENCODER_Read(RIGHT_WHEEL);
 
-    //float pourcentageVitesse = float(readEncoder0/distanceEncodeur) * 100; 
+    //float pourcentageVitesse = float(readEncoder0/distanceEncodeur) * 100;
     //PID FOR ENCODER
     float error = readEncoder0 - readEncoder1;
     float p = error * KP_FOWARD;
@@ -472,12 +686,10 @@ void movingReverseRobot(uint16_t distance){
     float adjSpeed = p + i;
     motorRight = motorLeft + adjSpeed;
 
-    
     MOTOR_SetSpeed(LEFT_WHEEL, 0.2);
     MOTOR_SetSpeed(RIGHT_WHEEL, 0.2);
-
   }
-  }
+}
 
 /**
  * @brief 
@@ -530,67 +742,85 @@ float accelerationDecelerationPID(float pourcentageVitesse, uint8_t acceleration
  */
 int detectColor()
 {
-    uint16_t clear, red, green, blue;
-    char couleur[1];
-    delay(200);  // takes 50ms to read
-    capteur.getRawData(&red, &green, &blue, &clear);
+  uint16_t clear, red, green, blue;
+  char couleur[1];
+  delay(200); // takes 50ms to read
+  capteur.getRawData(&red, &green, &blue, &clear);
 
+  float x = (-0.14282 * red) + (1.54924 * green) + (-0.95641 * blue);
+  float y = (-0.32466 * red) + (1.57837 * green) + (-0.73191 * blue);
+  float z = (-0.68202 * red) + (0.77073 * green) + (-0.56332 * blue);
+  float xx = x / (x + y + z);
+  float yy = y / (x + y + z);
 
-    float x =(-0.14282*red)+(1.54924*green)+(-0.95641*blue);
-    float y =(-0.32466*red)+(1.57837*green)+(-0.73191*blue);
-    float z =(-0.68202*red)+(0.77073*green)+(-0.56332*blue);
-    float xx=x/(x+y+z);
-    float yy=y/(x+y+z);
-
-    if (xx>-7 && xx<0 && yy>-10 && yy<0)
-    {
-        couleur[0]='r';
-        Serial.print(" \ncouleur\t "); Serial.print(couleur);
-        return 1;
-    }
-        else if (xx>0.5 && xx<0.6 && yy>0.75 && yy<0.85)
-    {
-        couleur[0]='b';
-        Serial.print(" \ncouleur\t "); Serial.print(couleur);
-        return 2;
-    }
-    else  if (xx>0.4 && xx<0.55 && yy>0.45 && yy<0.6)
-    {
-        couleur[0]='g';
-        Serial.print(" \ncouleur\t "); Serial.print(couleur);
-        return 3;
-    }
-    else  if (xx>0.55 && xx<0.70 && yy>0.65 && yy<0.75)
-    {
-        couleur[0]='w';
-        Serial.print(" \ncouleur\t "); Serial.print(couleur);
-        return 3;
-    }
-
-    Serial.print("C:"); Serial.print(clear);
-    Serial.print("\tR:"); Serial.print(red);
-    Serial.print("\tG:"); Serial.print(green);
-    Serial.print("\tB:"); Serial.print(blue);
-    Serial.print("\t X:"); Serial.print(xx);
-    Serial.print("\tY:\n"); Serial.print(yy);
-    return 0;
-}
-
-void servoMoteur(int angle){
-    if (angle>angleMoteur)
-    {
-        for (int i=angleMoteur;i<angle;i+=1){
-        SERVO_SetAngle(0,i);
-        delay(15);
+  if (xx > -7 && xx < 0 && yy > -10 && yy < 0)
+  {
+    couleur[0] = 'r';
+    Serial.print(" \ncouleur\t ");
+    Serial.print(couleur);
+    return 1;
   }
+  else if (xx > 0.5 && xx < 0.6 && yy > 0.75 && yy < 0.85)
+  {
+    couleur[0] = 'b';
+    Serial.print(" \ncouleur\t ");
+    Serial.print(couleur);
+    return 2;
+  }
+  else if (xx > 0.4 && xx < 0.55 && yy > 0.45 && yy < 0.6)
+  {
+    couleur[0] = 'g';
+    Serial.print(" \ncouleur\t ");
+    Serial.print(couleur);
+    return 3;
+  }
+  else if (xx > 0.55 && xx < 0.70 && yy > 0.65 && yy < 0.75)
+  {
+    couleur[0] = 'w';
+    Serial.print(" \ncouleur\t ");
+    Serial.print(couleur);
+    return 3;
+  }
+
+  Serial.print("C:");
+  Serial.print(clear);
+  Serial.print("\tR:");
+  Serial.print(red);
+  Serial.print("\tG:");
+  Serial.print(green);
+  Serial.print("\tB:");
+  Serial.print(blue);
+  Serial.print("\t X:");
+  Serial.print(xx);
+  Serial.print("\tY:\n");
+  Serial.print(yy);
+  return 0;
 }
-    else{
-      for (int i=angleMoteur;i>angle;i-=1){
-      SERVO_SetAngle(0,i);
+
+/**
+ * @brief 
+ * 
+ * @param angle 
+ */
+void servoMoteur(int angle)
+{
+  if (angle > angleMoteur)
+  {
+    for (int i = angleMoteur; i < angle; i += 1)
+    {
+      SERVO_SetAngle(0, i);
       delay(15);
-      }
-}
-  angleMoteur=angle;
+    }
+  }
+  else
+  {
+    for (int i = angleMoteur; i > angle; i -= 1)
+    {
+      SERVO_SetAngle(0, i);
+      delay(15);
+    }
+  }
+  angleMoteur = angle;
 }
 
 /**
@@ -635,7 +865,7 @@ void NRF24L01_TransmitData(char *data, uint8_t size)
 bool turnCarousel()
 {
   NRF24L01_TransmitData(sendDataCarousel, sizeof(sendDataCarousel));
-  
+
   int cpt = 0;
   while (!radio.available())
   { // attent le retour de commande carousel
@@ -654,90 +884,96 @@ bool turnCarousel()
     return 0;
 }
 
-void suiveur_ligne(){
-  
-Serial.println(voltageValue);
-MOTOR_SetSpeed(LEFT_WHEEL,0);
-MOTOR_SetSpeed(RIGHT_WHEEL,0);
-voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
-Serial.println(voltageValue);
-while (voltageValue>0&&voltageValue<4.5)
-    {
-        MOTOR_SetSpeed(LEFT_WHEEL,-0.2);
-        MOTOR_SetSpeed(RIGHT_WHEEL,-0.2);
-        voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
-        Serial.println(voltageValue);
-        if (voltageValue>1.4&&voltageValue<1.7)
-            {
-            gauche();
-            }
-        if (voltageValue>0.6&&voltageValue<1)
-            {
-            droite();
-            }
-            delay(100);
-            voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
-    }
-MOTOR_SetSpeed(LEFT_WHEEL,0);
-MOTOR_SetSpeed(RIGHT_WHEEL,0);
-Serial.println("fin");
-delay(500);
+void suiveur_ligne()
+{
 
-}
-
-void gauche(){
-    Serial.println("gauche");
-    for(voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);voltageValue<2.7 || voltageValue>2.9;)
-    {
-    MOTOR_SetSpeed(LEFT_WHEEL,-0.1);
-    MOTOR_SetSpeed(RIGHT_WHEEL,-0.15);
+  Serial.println(voltageValue);
+  MOTOR_SetSpeed(LEFT_WHEEL, 0);
+  MOTOR_SetSpeed(RIGHT_WHEEL, 0);
+  voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
+  Serial.println(voltageValue);
+  while (voltageValue > 0 && voltageValue < 4.5)
+  {
+    MOTOR_SetSpeed(LEFT_WHEEL, -0.2);
+    MOTOR_SetSpeed(RIGHT_WHEEL, -0.2);
     voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
     Serial.println(voltageValue);
+    if (voltageValue > 1.4 && voltageValue < 1.7)
+    {
+      gauche();
     }
-    for(int i=0;i<1;i++){
-    MOTOR_SetSpeed(LEFT_WHEEL,-0.15);
-    MOTOR_SetSpeed(RIGHT_WHEEL,-0.1);
-    delay(35);
+    if (voltageValue > 0.6 && voltageValue < 1)
+    {
+      droite();
     }
+    delay(100);
+    voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
+  }
+  MOTOR_SetSpeed(LEFT_WHEEL, 0);
+  MOTOR_SetSpeed(RIGHT_WHEEL, 0);
+  Serial.println("fin");
+  delay(500);
 }
 
-void droite(){
-     Serial.println("droite");
-    for(voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);voltageValue<2.7 ||voltageValue>2.9;){
-    MOTOR_SetSpeed(LEFT_WHEEL,-0.15);
-    MOTOR_SetSpeed(RIGHT_WHEEL,-0.1);
+void gauche()
+{
+  Serial.println("gauche");
+  for (voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0); voltageValue < 2.7 || voltageValue > 2.9;)
+  {
+    MOTOR_SetSpeed(LEFT_WHEEL, -0.1);
+    MOTOR_SetSpeed(RIGHT_WHEEL, -0.15);
     voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
-    Serial.println(voltageValue);}
-    for(int i=0;i<1;i++){
-    MOTOR_SetSpeed(LEFT_WHEEL,-0.1);
-    MOTOR_SetSpeed(RIGHT_WHEEL,-0.15);
+    Serial.println(voltageValue);
+  }
+  for (int i = 0; i < 1; i++)
+  {
+    MOTOR_SetSpeed(LEFT_WHEEL, -0.15);
+    MOTOR_SetSpeed(RIGHT_WHEEL, -0.1);
     delay(35);
-    }
+  }
+}
+
+void droite()
+{
+  Serial.println("droite");
+  for (voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0); voltageValue < 2.7 || voltageValue > 2.9;)
+  {
+    MOTOR_SetSpeed(LEFT_WHEEL, -0.15);
+    MOTOR_SetSpeed(RIGHT_WHEEL, -0.1);
+    voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
+    Serial.println(voltageValue);
+  }
+  for (int i = 0; i < 1; i++)
+  {
+    MOTOR_SetSpeed(LEFT_WHEEL, -0.1);
+    MOTOR_SetSpeed(RIGHT_WHEEL, -0.15);
+    delay(35);
+  }
 }
 
 int detecterCle(int retrait)
 {
   servoMoteur(90);
   Serial.println("dc");
-  float valeurBase = analogRead(PIN_ANALOG_CLE)* (5 / 1023.0);
+  float valeurBase = analogRead(PIN_ANALOG_CLE) * (5 / 1023.0);
   Serial.println(valeurBase);
-  while (retrait==0)
+  while (retrait == 0)
   {
     delay(50);
-    float  ValeurActuel = analogRead(PIN_ANALOG_CLE)* (5 / 1023.0);
+    float ValeurActuel = analogRead(PIN_ANALOG_CLE) * (5 / 1023.0);
     Serial.println(ValeurActuel);
-    if (ValeurActuel > valeurBase+0.02)
+    if (ValeurActuel > valeurBase + 0.02)
     {
       delay(1000);
       return 1;
     }
   }
-    while (retrait==1)
+  while (retrait == 1)
   {
     delay(50);
-    float  ValeurActuel = analogRead(PIN_ANALOG_CLE)* (5 / 1023.0);
+    float ValeurActuel = analogRead(PIN_ANALOG_CLE) * (5 / 1023.0);
     Serial.println(ValeurActuel);
-    if (ValeurActuel < valeurBase-0.02)
+    if (ValeurActuel < valeurBase - 0.02)
     {
       delay(1000);
       return 1;
@@ -746,25 +982,30 @@ int detecterCle(int retrait)
   return 0;
 }
 
-void turnedRobot180(){
-  MOTOR_SetSpeed(LEFT_WHEEL,-0.2);
-  MOTOR_SetSpeed(RIGHT_WHEEL,0.2);
+void turnedRobot180()
+{
+  MOTOR_SetSpeed(LEFT_WHEEL, -0.2);
+  MOTOR_SetSpeed(RIGHT_WHEEL, 0.2);
   delay(1000);
-for(voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);voltageValue<2.7 ||voltageValue>2.9;){
-    MOTOR_SetSpeed(LEFT_WHEEL,-0.2);
-    MOTOR_SetSpeed(RIGHT_WHEEL,0.2);
+  for (voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0); voltageValue < 2.7 || voltageValue > 2.9;)
+  {
+    MOTOR_SetSpeed(LEFT_WHEEL, -0.2);
+    MOTOR_SetSpeed(RIGHT_WHEEL, 0.2);
     voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0);
-    Serial.println(voltageValue);}
-    MOTOR_SetSpeed(LEFT_WHEEL,0);
-    MOTOR_SetSpeed(RIGHT_WHEEL,0);
+    Serial.println(voltageValue);
+  }
+  MOTOR_SetSpeed(LEFT_WHEEL, 0);
+  MOTOR_SetSpeed(RIGHT_WHEEL, 0);
 }
 
-void manipul(int fonction){
-    
-    if (fonction==1){
+void manipul(int fonction)
+{
+
+  if (fonction == 1)
+  {
     servoMoteur(90);
     delay(1000);
-    movingReverseRobot(9.5); 
+    movingReverseRobot(9.5);
     delay(50);
     turnedRobot(-5);
     delay(1000);
@@ -772,11 +1013,12 @@ void manipul(int fonction){
     delay(1000);
     turnedRobot(5);
     delay(1000);
-    }
-     if (fonction==2){
+  }
+  if (fonction == 2)
+  {
     servoMoteur(70);
     delay(1000);
-    movingReverseRobot(9.5); 
+    movingReverseRobot(9.5);
     delay(50);
     turnedRobot(-5);
     delay(1000);
@@ -784,7 +1026,283 @@ void manipul(int fonction){
     delay(1000);
     turnedRobot(5);
     delay(1000);
+  }
+  movingFowardRobot(2);
+  servoMoteur(90);
+}
+
+void infoDebut()
+{
+  display.clearDisplay();
+  display.setCursor(0, 7);
+  display.setTextSize(1);
+  display.print("Debut");
+  display.setTextSize(2);
+  display.setCursor(xDebut, 15);
+  display.print(debut);
+  display.display();
+  xDebut = xDebut - 4;
+  if (xDebut < minDebut)
+    xDebut = display.width();
+}
+
+void infoRetrait()
+{
+  display.clearDisplay();
+  display.setCursor(0, 7);
+  display.setTextSize(1);
+  display.print("Retrait");
+  display.setTextSize(2);
+  display.setCursor(xRetrait, 15);
+  display.print(retrait);
+  display.display();
+  xRetrait = xRetrait - 4;
+  if (xRetrait < minRetrait)
+    xRetrait = display.width();
+}
+
+void infoDepot()
+{
+  display.clearDisplay();
+  display.setCursor(0, 7);
+  display.setTextSize(1);
+  display.print("Depot");
+  display.setTextSize(2);
+  display.setCursor(xDepot, 15);
+  display.print(depot);
+  display.display();
+  xDepot = xDepot - 4;
+  if (xDepot < minDepot)
+    xDepot = display.width();
+}
+
+void infoID()
+{
+  display.clearDisplay();
+  display.setCursor(0, 7);
+  display.setTextSize(1);
+  display.print("ID");
+  display.setTextSize(2);
+  display.setCursor(xID, 15);
+  display.print(identification);
+  display.display();
+  xID = xID - 4;
+  if (xID < minID)
+    xID = display.width();
+}
+
+void infoID_R()
+{
+  display.clearDisplay();
+  display.setCursor(0, 7);
+  display.setTextSize(1);
+  display.print("BITE");
+  display.setTextSize(2);
+  display.setCursor(xID_R, 15);
+  display.print(ID_retrait);
+  display.display();
+  xID_R = xID_R - 7;
+  if (xID_R < minID_R)
+    xID_R = display.width();
+}
+
+void infoEchec()
+{
+  display.clearDisplay();
+  display.setCursor(0, 7);
+  display.setTextSize(1);
+  display.print("Echec");
+  display.setTextSize(2);
+  display.setCursor(xTest, 15);
+  display.print(test_echoue);
+  display.display();
+  xTest = xTest - 7;
+  if (xTest < minTest)
+    xTest = display.width();
+}
+
+void infoReussite()
+{
+  display.clearDisplay();
+  display.setCursor(0, 7);
+  display.setTextSize(1);
+  display.print("Reussite");
+  display.setTextSize(2);
+  display.setCursor(xReussite, 15);
+  display.print(test_reussite);
+  display.display();
+  xReussite = xReussite - 7;
+  if (xReussite < minReussite)
+    xReussite = display.width();
+}
+
+void fingerprintRegistration()
+{
+  uint8_t ID, i;
+  /*Compare the captured fingerprint with all fingerprints in the fingerprint library
+    Return fingerprint ID number(1-80) if succeed, return 0 when failed
+    Function: clear the last captured fingerprint image
+   */
+  fingerprint.search(); //Can add "if else" statement to judge whether the fingerprint has been registered.
+  /*Get a unregistered ID for saving fingerprint 
+    Return ID number when succeed 
+    Return ERR_ID809 if failed
+   */
+  if ((ID = fingerprint.getEmptyID()) == ERR_ID809)
+  {
+    while (1)
+    {
+      /*Get error code imformation*/
+      //desc = fingerprint.getErrorDescription();
+      //Serial.println(desc);
+      delay(1000);
     }
-    movingFowardRobot(2);
-    servoMoteur(90);
+  }
+  Serial.print("Unregistered ID,ID=");
+  Serial.println(ID);
+  i = 0; //Clear sampling times
+  /*Fingerprint Sampling 3 times */
+  while (i < COLLECT_NUMBER)
+  {
+    /*Set fingerprint LED ring to breathing lighting in blue*/
+    fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eBreathing, /*LEDColor = */ fingerprint.eLEDBlue, /*blinkCount = */ 0);
+    Serial.print("The fingerprint sampling of the");
+    Serial.print(i + 1);
+    Serial.println("(th) time is being taken");
+    Serial.println("Please press down your finger");
+    /*Capture fingerprint image, 10s idle timeout 
+      If succeed return 0, otherwise return ERR_ID809
+     */
+    if ((fingerprint.collectionFingerprint(/*timeout = */ 10)) != ERR_ID809)
+    {
+      /*Set fingerprint LED ring to quick blink in yellow 3 times*/
+      fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eFastBlink, /*LEDColor = */ fingerprint.eLEDYellow, /*blinkCount = */ 3);
+      Serial.println("Capturing succeeds");
+      i++; //Sampling times +1
+    }
+    else
+    {
+      Serial.println("Capturing fails");
+      /*Get error code information*/
+      //desc = fingerprint.getErrorDescription();
+      //Serial.println(desc);
+    }
+    Serial.println("Please release your finger");
+    /*Wait for finger to release
+      Return 1 when finger is detected, otherwise return 0 
+     */
+    while (fingerprint.detectFinger())
+      ;
+  }
+
+  /*Save fingerprint information into an unregistered ID*/
+  if (fingerprint.storeFingerprint(/*Empty ID = */ ID) != ERR_ID809)
+  {
+
+    tabID[cptID++][0] = ID;
+
+    Serial.print("Saving succeed，ID=");
+    Serial.println(ID);
+    /*Set fingerprint LED ring to always ON in green*/
+    fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eKeepsOn, /*LEDColor = */ fingerprint.eLEDGreen, /*blinkCount = */ 0);
+    delay(1000);
+    /*Turn off fingerprint LED ring */
+    fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eNormalClose, /*LEDColor = */ fingerprint.eLEDBlue, /*blinkCount = */ 0);
+  }
+  else
+  {
+    Serial.println("Saving failed");
+    /*Get error code information*/
+    //desc = fingerprint.getErrorDescription();
+    //Serial.println(desc);
+  }
+  Serial.println("-----------------------------");
+}
+
+void fingerprintMatching()
+{
+  /*Compare the captured fingerprint with all fingerprints in the fingerprint library
+    Return fingerprint ID number(1-80) if succeed, return 0 when failed
+   */
+  uint8_t ret = fingerprint.search();
+  if (ret != 0)
+  {
+    /*Set fingerprint LED ring to always ON in green*/
+    fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eKeepsOn, /*LEDColor = */ fingerprint.eLEDGreen, /*blinkCount = */ 0);
+    Serial.print("Successfully matched,ID=");
+    Serial.println(ret);
+  }
+  else
+  {
+    /*Set fingerprint LED Ring to always ON in red*/
+    fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eKeepsOn, /*LEDColor = */ fingerprint.eLEDRed, /*blinkCount = */ 0);
+    Serial.println("Matching failed");
+  }
+  delay(1000);
+  /*Turn off fingerprint LED Ring*/
+  fingerprint.ctrlLED(/*LEDMode = */ fingerprint.eNormalClose, /*LEDColor = */ fingerprint.eLEDBlue, /*blinkCount = */ 0);
+  Serial.println("-----------------------------");
+}
+
+void printAlcohol(int value)
+{
+  display.clearDisplay();
+  display.setTextSize(2);
+  display.setTextColor(WHITE);
+  display.setCursor(45, 10);
+  display.println(val);
+  display.display();
+}
+
+int readAlcohol()
+{
+  int val = 0;
+  int val1;
+  int val2;
+  int val3;
+  int val4;
+  int val5;
+  int val6;
+  int val7;
+
+  int val8;
+  int val9;
+  int val10;
+  int val11;
+  int val12;
+  int val13;
+  int val14;
+  int val15;
+
+  display.clearDisplay();
+  val1 = analogRead(analogPin);
+  delay(20);
+  val2 = analogRead(analogPin);
+  delay(20);
+  val3 = analogRead(analogPin);
+  delay(20);
+  val4 = analogRead(analogPin);
+  delay(20);
+  val5 = analogRead(analogPin);
+  delay(20);
+  val6 = analogRead(analogPin);
+  delay(20);
+  val7 = analogRead(analogPin);
+  delay(20);
+  val8 = analogRead(analogPin);
+  delay(20);
+  val9 = analogRead(analogPin);
+  delay(20);
+  val10 = analogRead(analogPin);
+  delay(20);
+  val11 = analogRead(analogPin);
+  delay(20);
+  val13 = analogRead(analogPin);
+  delay(20);
+  val14 = analogRead(analogPin);
+  delay(20);
+  val5 = analogRead(analogPin);
+
+  val = (val1 + val2 + val3 + val4 + val5 + val6 + val7 + val8 + val9 + val10 + val11 + val12 + val13 + val14 + val15) / 15;
+  return val;
 }
