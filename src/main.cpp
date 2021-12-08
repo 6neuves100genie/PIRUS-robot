@@ -96,7 +96,7 @@ SoftwareSerial Serialt(67, 53); //RX, TX
 char depot[] = "Deposer vos clefs sur le crochet.";
 char identification[] = " appuyer votre doitg sur le TouchID jusqu'a ce qu'il clignote jaune 3 fois, repete cette etape jusqu'a ce qu'il clignotte vert";
 char retrait[] = "Veuillez souffler sur le capteur pour recup vos clefs";
-char debut[] = "Bouton vert pour dépot clefs       Bouton bleu pour retrait clefs";
+char debut[] = "Bouton vert pour depot clefs       Bouton bleu pour retrait clefs";
 char ID_retrait[] = "Appuyer le touch ID jusqu'a ce qu'il clignote bleu 3 fois";
 char test_echoue[] = "Test echoue, veuillez degriser";
 char test_reussite[] = "Bravo, vous pouvez conduire";
@@ -203,6 +203,7 @@ void setup()
   BoardInit();
   //Serial.begin(9600);
   NRF24L01_Init();
+  servoMoteur(90);
 
   Serial.println("test");
 
@@ -264,7 +265,7 @@ void setup()
   readEncoder0 = 0;
   readEncoder1 = 0;
 
-  Step = FIND_GOOD_KEY;
+  Step = IDENTIFICATION; /***************************************************************************************/
 }
 
 /**
@@ -354,7 +355,7 @@ void executeStep()
       scanDoigt = 0;
       Serial.println("************************************************************************************");
 
-      while (p <= 100)
+      while (p <= 25)
       {
         display.clearDisplay();
 
@@ -465,10 +466,11 @@ void executeStep()
 
     Serial.println("************************************************************************************");
     //int Couleur_actuel = detectColor();
-    
+
     if (EtatClient == RETRAIT)
     {
       turnCarousel();
+      delay(1000);
       Step = TAKE_KEY;
     }
     if (EtatClient == DEPOT)
@@ -480,16 +482,12 @@ void executeStep()
   case 3:
     turnedRobot180();
     delay(50);
-    turnedRobot180();
-    delay(50);
     manipul(1);
     Step = GO_BACK;
     break;
 
   case 4:
     Serial.println("************************************************************************************");
-    turnedRobot180();
-    delay(50);
     turnedRobot180();
     delay(50);
     manipul(2);
@@ -503,8 +501,6 @@ void executeStep()
 
   case 6:
     suiveur_ligne();
-    delay(50);
-    turnedRobot180();
     delay(50);
     turnedRobot180();
     Step = IDENTIFICATION;
@@ -624,6 +620,7 @@ void movingFowardRobot(uint16_t distance)
     MOTOR_SetSpeed(LEFT_WHEEL, -0.2);
     MOTOR_SetSpeed(RIGHT_WHEEL, -0.2);
   }
+  stopMotor();
 }
 
 void movingReverseRobot(uint16_t distance)
@@ -660,6 +657,7 @@ void movingReverseRobot(uint16_t distance)
     MOTOR_SetSpeed(LEFT_WHEEL, 0.2);
     MOTOR_SetSpeed(RIGHT_WHEEL, 0.2);
   }
+  stopMotor();
 }
 
 /**
@@ -888,7 +886,7 @@ void suiveur_ligne()
 void gauche()
 {
   Serial.println("gauche");
-  for (voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0); voltageValue < 2.7 || voltageValue > 2.9;)
+  for (voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0); voltageValue < 2.7 || voltageValue > 2.9 && voltageValue<4.5;)
   {
     MOTOR_SetSpeed(LEFT_WHEEL, -0.1);
     MOTOR_SetSpeed(RIGHT_WHEEL, -0.15);
@@ -906,7 +904,7 @@ void gauche()
 void droite()
 {
   Serial.println("droite");
-  for (voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0); voltageValue < 2.7 || voltageValue > 2.9;)
+  for (voltageValue = (analogRead(ANALOG_LINE_FOLLOWER)) * (5 / 1023.0); voltageValue < 2.7 || voltageValue > 2.9 && voltageValue<4.5;)
   {
     MOTOR_SetSpeed(LEFT_WHEEL, -0.15);
     MOTOR_SetSpeed(RIGHT_WHEEL, -0.1);
@@ -977,10 +975,9 @@ void turnedRobot180()
 
 void manipul(int fonction)
 {
-
   if (fonction == 1)
   {
-    servoMoteur(90);
+    //servoMoteur(90);
     delay(1000);
     movingReverseRobot(9.5);
     delay(50);
